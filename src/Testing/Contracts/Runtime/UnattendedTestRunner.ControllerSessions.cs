@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using HarmonyLib;
 using Godot;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
@@ -6,11 +7,85 @@ using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Rooms;
+using MegaCrit.Sts2.Core.Runs;
+using MegaCrit.Sts2.Core.GameActions;
 
 namespace CombatSolver;
 
 internal sealed partial class UnattendedTestRunner
 {
+    private static int _endTurnRefusalsRemaining;
+    private static int _endTurnRequestsObserved;
+
+    private static bool RefuseEndTurnForTesting(CombatManager __instance, Player __0, bool __1)
+    {
+        if (!__1) return true;
+        _endTurnRequestsObserved++;
+        if (_endTurnRefusalsRemaining <= 0) return true;
+        _endTurnRefusalsRemaining--;
+        __instance.UndoReadyToEndTurn(__0);
+        return false;
+    }
+
+    private async Task AssertEndTurnAcknowledgementAsync(CombatState combat, Player player)
+    {
+        const string owner = "CombatSolver.Unattended.EndTurnAcknowledgement";
+        var target = AccessTools.Method(typeof(CombatManager), nameof(CombatManager.SetReadyToEndTurn));
+        Harmony harmony = new(owner);
+        SolverSettingsData original = SolverSettings.Current;
+        SolverSettings.ApplyForTesting(original with { AutomaticCalculationEnabled = false, AutoEnableFullAuto = false });
+        harmony.Patch(target, prefix: new HarmonyMethod(AccessTools.Method(
+            typeof(UnattendedTestRunner), nameof(RefuseEndTurnForTesting))));
+        try
+        {
+            int turn = player.PlayerCombatState!.TurnNumber;
+            _endTurnRefusalsRemaining = 1;
+            GameAction rejected = await SolverController.EnqueueAndCaptureActionAsync(
+                action => action is EndPlayerTurnAction,
+                () => RunManager.Instance.ActionQueueSynchronizer.RequestEnqueue(new EndPlayerTurnAction(player, turn)),
+                CancellationToken.None);
+            await rejected.CompletionTask;
+            if (player.PlayerCombatState.TurnNumber != turn
+                || CombatManager.Instance.IsPlayerReadyToEndTurn(player))
+                throw new InvalidOperationException("Refusal fixture failed to reproduce completed action without native readiness.");
+            _completedChecks.Add("EndTurnAcknowledgement:Baseline:CompletedActionWithoutNativeAcceptance");
+            _endTurnRefusalsRemaining = 2;
+            _endTurnRequestsObserved = 0;
+            await SolverController.SubmitDeploymentEndTurnAsync(_host, combat, player, turn, CancellationToken.None);
+            if (_endTurnRequestsObserved != 3)
+                throw new InvalidOperationException("End-turn completion did not retry exactly the two native refusals.");
+            while (player.PlayerCombatState!.TurnNumber == turn || player.PlayerCombatState.Phase != PlayerTurnPhase.Play)
+                await _host.ToSignal(_host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await RunManager.Instance.ActionExecutor.FinishedExecutingActions();
+            if (player.PlayerCombatState.TurnNumber != turn + 1)
+                throw new InvalidOperationException("End-turn acknowledgement advanced more than one native turn.");
+            _completedChecks.Add("EndTurnAcknowledgement:TwoNativeRefusals:ThreeRequests:ExactlyOneTurn");
+
+            _endTurnRefusalsRemaining = int.MaxValue;
+            _endTurnRequestsObserved = 0;
+            bool refused = false;
+            try
+            {
+                await SolverController.SubmitDeploymentEndTurnAsync(_host, combat, player, turn + 1, CancellationToken.None);
+            }
+            catch (InvalidOperationException exception) when (exception.Message == SolverText.Get("原生结束回合请求持续未被接受；已停止执行，请检查回合保护或手动结束回合。"))
+            {
+                refused = true;
+            }
+            if (!refused || _endTurnRequestsObserved < 2 || _endTurnRequestsObserved > 30
+                || player.PlayerCombatState.TurnNumber != turn + 1
+                || CombatManager.Instance.IsPlayerReadyToEndTurn(player))
+                throw new InvalidOperationException("Persistent end-turn refusal must fail without reporting acceptance or advancing the turn.");
+            _completedChecks.Add("EndTurnAcknowledgement:PersistentRefusal:BoundedRetries:ExplicitFailure:NoAdvance");
+        }
+        finally
+        {
+            harmony.Unpatch(target, HarmonyPatchType.All, owner);
+            SolverSettings.ApplyForTesting(original);
+            _endTurnRefusalsRemaining = 0;
+        }
+    }
+
     private async Task AssertOverlayVisibilityLifecycleAsync(CombatState combat)
     {
         NGame host = NGame.Instance

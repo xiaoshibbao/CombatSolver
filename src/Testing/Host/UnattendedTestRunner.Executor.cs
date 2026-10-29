@@ -159,6 +159,11 @@ internal sealed partial class UnattendedTestRunner
                 runner.AssertDeploymentPresentationTurn();
                 return Observation(combatEnded: false);
             }
+            if (request.ScenarioId == "END-TURN-ACKNOWLEDGEMENT")
+            {
+                await runner.AssertEndTurnAcknowledgementAsync(combatState, player);
+                return Observation(combatEnded: false);
+            }
             if (request.ScenarioId is "ORBIT-SEARCH-QUALITY" or "ORBIT-SEARCH-QUALITY-SHORT" or "ORBIT-SEARCH-QUALITY-DEPLOY"
                 or "AUTOMATION-SEARCH-QUALITY" or "AUTOMATION-SEARCH-QUALITY-SHORT" or "AUTOMATION-SEARCH-QUALITY-DEPLOY")
             {

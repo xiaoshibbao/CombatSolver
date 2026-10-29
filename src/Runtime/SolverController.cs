@@ -3370,13 +3370,7 @@ internal static partial class SolverController
                 await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
                 token.ThrowIfCancellationRequested();
                 PlanCardChoice[] endTurnChoices = CaptureDeploymentEndTurnChoices(plannedEndTurn);
-                Task<GameAction> EnqueueEndTurnAsync() => EnqueueAndCaptureActionAsync(
-                    candidate => candidate is EndPlayerTurnAction end && end.OwnerId == player.NetId,
-                    () =>
-                    {
-                        CombatManager.Instance.OnEndedTurnLocally();
-                        RunManager.Instance.ActionQueueSynchronizer.RequestEnqueue(new EndPlayerTurnAction(player, turn));
-                    }, token);
+                Task<GameAction> EnqueueEndTurnAsync() => SubmitDeploymentEndTurnAsync(host, state, player, turn, token);
                 Task endTurnCompletion;
                 if (endTurnChoices.Length > 0)
                 {
@@ -3558,6 +3552,45 @@ internal static partial class SolverController
             exception.Message,
             "部署途中已不再是原玩家回合。",
             StringComparison.Ordinal);
+
+    internal static async Task<GameAction> SubmitDeploymentEndTurnAsync(
+        NGame host, CombatState state, Player player, int turn, CancellationToken token)
+    {
+        // EndPlayerTurnAction completes even when SetReadyToEndTurn is refused.
+        // Confirm native acceptance before consuming end-turn choices or showing history.
+        LiveCombatStamp before = LiveCombatStamp.Capture(state);
+        long startedAt = System.Environment.TickCount64;
+        for (int attempt = 1; ; attempt++)
+        {
+            token.ThrowIfCancellationRequested();
+            GameAction action = await EnqueueAndCaptureActionAsync(
+                candidate => candidate is EndPlayerTurnAction end && end.OwnerId == player.NetId,
+                () =>
+                {
+                    CombatManager.Instance.OnEndedTurnLocally();
+                    RunManager.Instance.ActionQueueSynchronizer.RequestEnqueue(new EndPlayerTurnAction(player, turn));
+                }, token);
+            await action.CompletionTask.WaitAsync(token);
+            if (!CombatManager.Instance.IsInProgress || !IsSamePlayableTurn(state, turn)
+                || CombatManager.Instance.IsPlayerReadyToEndTurn(player))
+            {
+                Entry.Logger.Info($"[CombatSolver/Test] DEPLOY_END_TURN_ACCEPTED turn={turn} attempts={attempt}");
+                return action;
+            }
+
+            Entry.Logger.Warn($"[CombatSolver/Test] DEPLOY_END_TURN_REFUSED turn={turn} attempt={attempt}");
+            if (System.Environment.TickCount64 - startedAt >= 5000)
+                throw new InvalidOperationException(SolverText.Get("原生结束回合请求持续未被接受；已停止执行，请检查回合保护或手动结束回合。"));
+            await WaitForDeploymentDelayAsync(host, 0.2d, token);
+            await RunManager.Instance.ActionExecutor.FinishedExecutingActions().WaitAsync(token);
+            token.ThrowIfCancellationRequested();
+            if (!CombatManager.Instance.IsInProgress || !IsSamePlayableTurn(state, turn)
+                || CombatManager.Instance.IsPlayerReadyToEndTurn(player))
+                return action;
+            if (LiveCombatStamp.Capture(state) != before)
+                throw new InvalidOperationException("部署途中已不再是原玩家回合。");
+        }
+    }
 
     internal static async Task<GameAction> EnqueueAndCaptureActionAsync(
         Func<GameAction, bool> matches,

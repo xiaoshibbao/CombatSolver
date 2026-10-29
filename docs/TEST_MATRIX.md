@@ -1,6 +1,6 @@
 # CombatSolver 测试入口
 
-本地多人适配的本轮证据与复跑入口见[多人支持](multiplayer.md)：包含全玩家根/Fork、原生动作/回合、跨玩家内容、ENet 同步及队友额外回合。上游多人历史记录不计作本轮验证；本机 ENet 不证明 Steam 公网与可见布局。Claude UI 后续收尾包含离线特性移除、双语界面合同和0预算确定性尾部/原生回合差分，详情见[开发笔记](DEVELOPMENT_NOTES.md)；可见布局未重验。
+本地多人适配的本轮证据与复跑入口见[多人支持](multiplayer.md)：包含全玩家根/Fork、原生动作/回合、跨玩家内容、ENet 同步及队友额外回合。上游多人历史记录不计作本轮验证；本机 ENet 不证明 Steam 公网与可见布局。Claude UI 收尾及 `END-TURN-ACKNOWLEDGEMENT`（默认遭遇、敌人200HP，覆盖完成任务但原生拒绝、重试和持续拒绝失败）详情见[开发笔记](DEVELOPMENT_NOTES.md)；可见布局未重验。
 2026-10-07 PR #227–#230 的本机 `SMART-POTION-AUDIT-BUDGET`、旧报告、GC 合同，以及 O068 和固定哨兵整场部署通过。O056 最终与当前主线同为 62 战损，历史界 42 未达成；组件证明合同被 native-version 门禁拒绝。最小复跑入口、同根对照、失败及未验证范围见[整合验证](archive/testing/pr-integration-20261007.md)。
 
 贡献者 2026-10-06 的 Linux [计划续搜完整胜利证明](performance/plan-witness-propagation-20261006.md)：原生计划循环与最终 GC 合同 Passed；政策门禁、16 Fork、DOP1/16 实际成员派发与一次压缩完整回收通过，实例清理。11 根 44 次纯交错质量及峰值通过；2 次完整诊断、9 次根审计单列。未做全29根、上传包或可见性能，历史战损差异保留。

@@ -3373,19 +3373,13 @@ internal static class SolverOverlay
         RefreshControls();
     }
 
-    internal static async Task AssertCollapsedCurrentTurnForTesting()
+    internal static async Task AssertCollapsedCurrentTurnForTesting(SolverOverlaySnapshot snapshot)
     {
         NGame host = NGame.Instance!;
         SolverOverlaySnapshot? previous = _lastSnapshot;
         bool collapsed = _collapsed;
         try
         {
-            SolverOverlayActionSnapshot attack = SolverOverlaySnapshot.CaptureAction(
-                new PlanAction(PlanActionKind.PlayCard, 1, CardId: "STRIKE_IRONCLAD"), []);
-            SolverOverlayTurnSnapshot turn = new(1, [], [attack], null, 6, 0, 0, 2, false);
-            SolverOverlaySnapshot snapshot = new(1, "UI test", SolverOverlayTone.Success,
-                "", "", 0, 0, true, "0 HP", 0, 0, false,
-                [turn, turn with { Turn = 2 }], "", false, null);
             ShowResult(host, snapshot);
             SetCollapsed(true);
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);

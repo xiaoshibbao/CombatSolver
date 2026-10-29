@@ -133,7 +133,13 @@ internal sealed partial class UnattendedTestRunner
             {
                 LocManager.Instance.SetLanguage(target);
                 await _host.ToSignal(_host.GetTree(), SceneTree.SignalName.ProcessFrame);
-                await SolverOverlay.AssertCollapsedCurrentTurnForTesting();
+                SolverOverlayActionSnapshot attack = SolverOverlaySnapshot.CaptureAction(
+                    new PlanAction(PlanActionKind.PlayCard, 1, CardId: "STRIKE_IRONCLAD"), []);
+                SolverOverlayTurnSnapshot turn = new(1, [], [attack], null, 6, 0, 0, 2, false);
+                SolverOverlaySnapshot snapshot = new(1, "UI test", SolverOverlayTone.Success,
+                    "", "", 0, 0, true, "0 HP", 0, 0, false,
+                    [turn, turn with { Turn = 2 }], "", false, null);
+                await SolverOverlay.AssertCollapsedCurrentTurnForTesting(snapshot);
                 _completedChecks.Add($"CollapsedRoute:{target}:CurrentTurnVisible:FutureHidden:ExpandedRestoresSameRow");
             }
             foreach (string target in new[] { "eng", "zhs", "zht" })

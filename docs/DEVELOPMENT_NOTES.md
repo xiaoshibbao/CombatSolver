@@ -8,6 +8,16 @@
 
 ## 下一版本（开发中）
 
+### 原生结束回合被拒绝后误报完成
+
+用户反馈单人仍会显示“等待下一回合”却没有结束回合。本机安装的 HoldYourTurn 0.2.3 会在抽牌/获得能量后的保护窗口拦截 `SetReadyToEndTurn`，撤销 ready；原生 `EndPlayerTurnAction.ExecuteAction` 仍返回完成任务。此前等待 CompletionTask 不能证明请求生效，缺少原生确认。
+
+Runtime 现确认玩家 ready 或已离开原可出牌回合，才消费回合末选择并显示完成。未接受时每0.2秒按原生队列重试，限5秒；真实状态变化交回原漂移处理，持续拒绝显式失败。保留原生保护，不引用/修改 HoldYourTurn、不直接强制 ready。失败文案提供英文。
+
+`END-TURN-ACKNOWLEDGEMENT` run `0fb35b6946a84abc9d4fb01ab7f0e75f` Passed：注入与保护窗口相同的原生拒绝，先证明动作任务完成但未 ready；连续拒绝两次后第三次接受且恰好进入下一回合；持续拒绝有界失败、不推进回合。证据 `.local/end-turn-ack/result.json`，测试补丁最终卸载、实例清理。最终 Release 构建0警告/0错误；该测试不等于包含 HoldYourTurn 的可见 Steam 实机验收。
+
+双端 ENet 正常自动部署连续两轮并进入第三回合的原生状态/阶段/完整 RNG 对账通过，证据 `.local/multiplayer-p0/enet-2-2a79262c7ddd464a93fc11f166aa8140`（房主 run `4287869b856f4dbfabe9eed96f9db6c6`）。结构门禁发现此前收起界面测试在 renderer 构造 PlanAction，已将该测试数据构造移回 Testing，渲染器继续只收只读 snapshot。工具检查的沙箱 MSYS 权限失败经正常授权后通过；文档检查通过。
+
 ### Claude 中断任务续作：离线界面与回合完成
 
 保留此前的扁平布局、统一字体、背景透明度和收起显示本回合牌序。删除反馈页、上传对话框、在线状态/战绩/录像自动上报和更新提醒及其构建连接元数据；清理调用方、退役测试与工具。大战损性能/多策略重试横幅一起移除，本地诊断导出、回放与录像导入保留。
