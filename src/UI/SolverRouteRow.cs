@@ -26,12 +26,14 @@ internal sealed partial class SolverRouteRow : PanelContainer
         Name = $"Route{index + 1}";
         CustomMinimumSize = new Vector2(0, SolverUiTokens.Size.RouteRowHeight);
         MouseFilter = MouseFilterEnum.Ignore;
+        // The current turn gets an accent wash; later turns sit flat on the surface without outlines.
         AddThemeStyleboxOverride("panel", SolverUiTokens.CreateBox(
-            index == 0 ? SolverUiTokens.Palette.SurfaceRaised : SolverUiTokens.Palette.Surface,
-            SolverUiTokens.Palette.BorderSubtle,
+            index == 0 ? SolverUiTokens.Palette.Tint(SolverUiTokens.Palette.Accent, 0.8f) : SolverUiTokens.Palette.Surface,
+            index == 0 ? new Color(SolverUiTokens.Palette.Accent, 0.30f) : Godot.Colors.Transparent,
             SolverUiTokens.Radius.Medium,
             SolverUiTokens.Spacing.Sm,
-            SolverUiTokens.Spacing.Sm));
+            SolverUiTokens.Spacing.Sm,
+            borderWidth: index == 0 ? 1 : 0));
 
         HBoxContainer layout = new()
         {

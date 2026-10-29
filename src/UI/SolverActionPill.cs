@@ -24,7 +24,7 @@ internal static class SolverActionPill
         pill.AddThemeStyleboxOverride("panel", SolverUiTokens.CreateBox(
             SolverUiTokens.Palette.SurfaceRaised,
             SolverUiTokens.Palette.BorderSubtle,
-            SolverUiTokens.Radius.Small,
+            SolverUiTokens.Radius.Pill,
             SolverUiTokens.Spacing.Sm,
             SolverUiTokens.Spacing.Xs));
 
@@ -132,7 +132,7 @@ internal static class SolverActionPill
         pill.AddThemeStyleboxOverride("panel", SolverUiTokens.CreateBox(
             SolverUiTokens.Palette.SurfaceRaised,
             SolverUiTokens.Palette.BorderSubtle,
-            SolverUiTokens.Radius.Small,
+            SolverUiTokens.Radius.Pill,
             SolverUiTokens.Spacing.Sm,
             SolverUiTokens.Spacing.Xs));
 
@@ -169,7 +169,7 @@ internal static class SolverActionPill
         pill.AddThemeStyleboxOverride("panel", SolverUiTokens.CreateBox(
             SolverUiTokens.Palette.SurfaceRaised,
             SolverUiTokens.Palette.BorderSubtle,
-            SolverUiTokens.Radius.Small,
+            SolverUiTokens.Radius.Pill,
             SolverUiTokens.Spacing.Sm,
             SolverUiTokens.Spacing.Xs));
         pill.AddChild(SolverUiTokens.CreateLabel(text, SolverUiTokens.Type.Body, color, FontType.Bold));

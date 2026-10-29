@@ -2222,7 +2222,7 @@ internal static class SolverOverlay
         title.SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin;
         header.AddChild(title);
 
-        _solverEnabledButton = CreateHeaderButton(SolverText.Get("求解器：开"), 90);
+        _solverEnabledButton = CreateHeaderButton(SolverText.Get("求解器：开"), 90, SolverButtonStyle.Secondary);
         _solverEnabledButton.Pressed += () => SolverController.SetSolverDisabled(!SolverController.SolverDisabled);
         header.AddChild(_solverEnabledButton);
 
@@ -2298,9 +2298,12 @@ internal static class SolverOverlay
         return _feedbackBanner;
     }
 
-    private static Button CreateHeaderButton(string text, float minimumWidth)
+    private static Button CreateHeaderButton(
+        string text,
+        float minimumWidth,
+        SolverButtonStyle style = SolverButtonStyle.Ghost)
     {
-        Button button = SolverUiTokens.CreateButton(text, SolverButtonStyle.Secondary);
+        Button button = SolverUiTokens.CreateButton(text, style);
         button.CustomMinimumSize = new Vector2(minimumWidth, SolverUiTokens.Size.ButtonHeight);
         button.ApplyLocaleFontSubstitution(FontType.Bold, "font");
         return button;
@@ -2339,12 +2342,16 @@ internal static class SolverOverlay
     }
 
     private static StyleBoxFlat CreateNoticeBox(bool hover = false)
+        => CreateToneBox(Warning, hover ? 1.6f : 1f, SolverUiTokens.Spacing.Xxs);
+
+    // Semantic wash: a faint fill and hairline in the tone color, so state reads before the text does.
+    private static StyleBoxFlat CreateToneBox(Color tone, float strength = 1f, int verticalPadding = SolverUiTokens.Spacing.Sm)
         => SolverUiTokens.CreateBox(
-            hover ? SolverUiTokens.Palette.SurfaceHover : SolverUiTokens.Palette.SurfaceRaised,
-            hover ? SolverUiTokens.Palette.Border : SolverUiTokens.Palette.BorderSubtle,
-            SolverUiTokens.Radius.Small,
+            SolverUiTokens.Palette.Tint(tone, strength),
+            new Color(tone, SolverUiTokens.IsLightTheme ? 0.35f : 0.30f),
+            SolverUiTokens.Radius.Medium,
             SolverUiTokens.Spacing.Md,
-            SolverUiTokens.Spacing.Xxs);
+            verticalPadding);
 
     private static Control CreatePerformanceHint()
     {
@@ -2500,11 +2507,11 @@ internal static class SolverOverlay
         _searchProgressBar.AddThemeStyleboxOverride("background",
             SolverUiTokens.CreateBox(
                 SolverUiTokens.Palette.ProgressBackground,
-                SolverUiTokens.Palette.BorderSubtle,
+                Colors.Transparent,
                 SolverUiTokens.Radius.Small,
                 0,
                 0,
-                borderWidth: 1));
+                borderWidth: 0));
         _searchProgressBar.AddThemeStyleboxOverride("fill",
             SolverUiTokens.CreateBox(
                 SolverUiTokens.Palette.ProgressFill,
@@ -2644,10 +2651,11 @@ internal static class SolverOverlay
         };
         panel.AddThemeStyleboxOverride("panel", SolverUiTokens.CreateBox(
             Surface,
-            SolverUiTokens.Palette.BorderSubtle,
+            Colors.Transparent,
             SolverUiTokens.Radius.Medium,
             SolverUiTokens.Spacing.Sm,
-            SolverUiTokens.Spacing.Sm));
+            SolverUiTokens.Spacing.Sm,
+            borderWidth: 0));
         return panel;
     }
 
@@ -2686,9 +2694,9 @@ internal static class SolverOverlay
         if (_summaryStatusBadge != null)
         {
             _summaryStatusBadge.AddThemeStyleboxOverride("panel", SolverUiTokens.CreateBox(
-                SolverUiTokens.Palette.SurfaceRaised,
-                SolverUiTokens.Palette.BorderSubtle,
-                SolverUiTokens.Radius.Small,
+                SolverUiTokens.Palette.Tint(color, 1.2f),
+                new Color(color, 0.28f),
+                SolverUiTokens.Radius.Pill,
                 horizontalPadding: SolverUiTokens.Spacing.Sm,
                 verticalPadding: 2));
         }
@@ -2766,12 +2774,7 @@ internal static class SolverOverlay
         {
             _feedbackBannerLabel.Text = text;
             _feedbackBannerLabel.AddThemeColorOverride("font_color", tone);
-            _feedbackBanner.AddThemeStyleboxOverride("panel", SolverUiTokens.CreateBox(
-                SolverUiTokens.Palette.SurfaceRaised,
-                SolverUiTokens.Palette.BorderSubtle,
-                SolverUiTokens.Radius.Small,
-                SolverUiTokens.Spacing.Md,
-                SolverUiTokens.Spacing.Sm));
+            _feedbackBanner.AddThemeStyleboxOverride("panel", CreateToneBox(tone));
         }
         if (visibilityChanged)
             QueueResponsiveLayout();

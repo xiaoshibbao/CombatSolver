@@ -9,6 +9,7 @@ internal enum SolverButtonStyle
     Primary,
     Positive,
     Danger,
+    Ghost,
 }
 
 internal static class SolverUiTokens
@@ -33,12 +34,12 @@ internal static class SolverUiTokens
     {
         (string Dark, string Light, string Active)[] colors =
         [
-            ("#b8c0cc", "#5f5f5f", Palette.TextSecondaryHex),
-            ("#858f9f", "#8a8a8a", Palette.TextMutedHex),
-            ("#5c9fc7", "#0078d4", Palette.AccentHex),
-            ("#d6a34c", "#9d5d00", Palette.WarningHex),
-            ("#e26666", "#c42b1c", Palette.DangerHex),
-            ("#69b77d", "#0f7b0f", Palette.SuccessHex),
+            ("#aab3c2", "#5f5f5f", Palette.TextSecondaryHex),
+            ("#7c8597", "#8a8a8a", Palette.TextMutedHex),
+            ("#6cb4e4", "#0078d4", Palette.AccentHex),
+            ("#e0b25c", "#9d5d00", Palette.WarningHex),
+            ("#ec6f6f", "#c42b1c", Palette.DangerHex),
+            ("#6cc287", "#0f7b0f", Palette.SuccessHex),
         ];
         foreach ((string dark, string light, string active) in colors)
         {
@@ -59,9 +60,9 @@ internal static class SolverUiTokens
     public static class Radius
     {
         public const int Small = 4;
-        public const int Medium = 6;
+        public const int Medium = 8;
         public const int Pill = 6;
-        public const int Large = 8;
+        public const int Large = 12;
     }
 
     public static class Type
@@ -97,23 +98,24 @@ internal static class SolverUiTokens
 
     public static class Palette
     {
-        public static Color Background => Pick("101216f5", "f3f3f3ff");
-        public static Color Surface => Pick("191c22fa", "ffffffff");
-        public static Color SurfaceRaised => Pick("23272ffb", "f7f9fbff");
-        public static Color SurfaceHover => Pick("2b3039ff", "efefefff");
-        public static Color Border => Pick("3a404aeb", "e0e0e0ff");
-        public static Color BorderSubtle => Pick("2a2f38cc", "eaeaeaff");
-        public static Color Accent => Pick("5c9fc7ff", "0078d4ff");
-        public static Color AccentHover => Pick("73b4d8ff", "106ebeff");
-        public static Color TextPrimary => Pick("eef1f6ff", "1b1b1bff");
-        public static Color TextSecondary => Pick("b8c0ccff", "5f5f5fff");
-        public static Color TextMuted => Pick("858f9fff", "8a8a8aff");
+        public static Color Background => Pick("0e1116f2", "f3f3f3ff");
+        public static Color Surface => Pick("171b22f7", "ffffffff");
+        public static Color SurfaceRaised => Pick("1f2530fa", "f7f9fbff");
+        public static Color SurfaceHover => Pick("29303dff", "efefefff");
+        // Dark borders are translucent white so they read as hairlines on every surface level.
+        public static Color Border => Pick("ffffff24", "e0e0e0ff");
+        public static Color BorderSubtle => Pick("ffffff14", "eaeaeaff");
+        public static Color Accent => Pick("6cb4e4ff", "0078d4ff");
+        public static Color AccentHover => Pick("86c4ecff", "106ebeff");
+        public static Color TextPrimary => Pick("edf1f7ff", "1b1b1bff");
+        public static Color TextSecondary => Pick("aab3c2ff", "5f5f5fff");
+        public static Color TextMuted => Pick("7c8597ff", "8a8a8aff");
         public static Color TextOutline => Pick("080a0de6", "ffffff00");
-        public static Color Warning => Pick("d6a34cff", "9d5d00ff");
-        public static Color Danger => Pick("e26666ff", "c42b1cff");
-        public static Color Success => Pick("69b77dff", "0f7b0fff");
-        public static Color Positive => Pick("34764fff", "107c10ff");
-        public static Color PositiveHover => Pick("428d60ff", "0e6e0eff");
+        public static Color Warning => Pick("e0b25cff", "9d5d00ff");
+        public static Color Danger => Pick("ec6f6fff", "c42b1cff");
+        public static Color Success => Pick("6cc287ff", "0f7b0fff");
+        public static Color Positive => Pick("2f7a50ff", "107c10ff");
+        public static Color PositiveHover => Pick("3a9061ff", "0e6e0eff");
 
         public static Color Attack => Pick("d96363ff", "c42b1cff");
         public static Color Skill => Pick("5b91d1ff", "0067c0ff");
@@ -130,12 +132,16 @@ internal static class SolverUiTokens
             ? new Color(0.45f, 0.72f, 0.98f, 1f)
             : new Color(1f, 0.88f, 0.48f, 1f);
 
-        public static string TextSecondaryHex => IsLightTheme ? "#5f5f5f" : "#b8c0cc";
-        public static string TextMutedHex => IsLightTheme ? "#8a8a8a" : "#858f9f";
-        public static string AccentHex => IsLightTheme ? "#0078d4" : "#5c9fc7";
-        public static string WarningHex => IsLightTheme ? "#9d5d00" : "#d6a34c";
-        public static string DangerHex => IsLightTheme ? "#c42b1c" : "#e26666";
-        public static string SuccessHex => IsLightTheme ? "#0f7b0f" : "#69b77d";
+        public static string TextSecondaryHex => IsLightTheme ? "#5f5f5f" : "#aab3c2";
+        public static string TextMutedHex => IsLightTheme ? "#8a8a8a" : "#7c8597";
+        public static string AccentHex => IsLightTheme ? "#0078d4" : "#6cb4e4";
+        public static string WarningHex => IsLightTheme ? "#9d5d00" : "#e0b25c";
+        public static string DangerHex => IsLightTheme ? "#c42b1c" : "#ec6f6f";
+        public static string SuccessHex => IsLightTheme ? "#0f7b0f" : "#6cc287";
+
+        /// <summary>Low-alpha wash of a semantic color, for badges, notices and highlighted rows.</summary>
+        public static Color Tint(Color tone, float strength = 1f)
+            => new(tone, (IsLightTheme ? 0.10f : 0.14f) * strength);
 
         private static Color Pick(string dark, string light)
             => Color.FromHtml(IsLightTheme ? light : dark);
@@ -167,9 +173,11 @@ internal static class SolverUiTokens
             ContentMarginRight = horizontalPadding,
             ContentMarginBottom = verticalPadding,
             ShadowColor = shadow
-                ? new Color(0f, 0f, 0f, IsLightTheme ? 0.08f : 0.38f)
+                ? new Color(0f, 0f, 0f, IsLightTheme ? 0.10f : 0.45f)
                 : Godot.Colors.Transparent,
-            ShadowSize = shadow ? 8 : 0,
+            ShadowSize = shadow ? 18 : 0,
+            ShadowOffset = shadow ? new Vector2(0, 4) : Vector2.Zero,
+            AntiAliasing = true,
         };
     }
 
@@ -266,9 +274,14 @@ internal static class SolverUiTokens
                     Palette.Danger,
                     Palette.Danger.Lightened(0.08f),
                     Palette.Danger.Darkened(0.32f)),
+                SolverButtonStyle.Ghost => (
+                    Godot.Colors.Transparent,
+                    Godot.Colors.Transparent,
+                    Palette.SurfaceHover,
+                    Palette.SurfaceRaised),
                 _ => (
                     Palette.SurfaceRaised,
-                    Palette.BorderSubtle,
+                    Palette.Border,
                     Palette.SurfaceHover,
                     Palette.Surface),
             };
@@ -276,11 +289,13 @@ internal static class SolverUiTokens
             button.AddThemeStyleboxOverride("normal", CreateBox(
                 darkBackground, darkBorder, radius, hPad, vPad));
             button.AddThemeStyleboxOverride("hover", CreateBox(
-                darkHover, darkBorder.Lightened(0.12f), radius, hPad, vPad));
+                darkHover, style == SolverButtonStyle.Ghost ? Palette.Border : darkBorder.Lightened(0.12f),
+                radius, hPad, vPad));
             button.AddThemeStyleboxOverride("pressed", CreateBox(
                 darkPressed, darkBorder, radius, hPad, vPad));
             button.AddThemeStyleboxOverride("disabled", CreateBox(
-                Palette.Background, Palette.BorderSubtle, radius, hPad, vPad));
+                style == SolverButtonStyle.Ghost ? Godot.Colors.Transparent : Palette.Background,
+                Palette.BorderSubtle, radius, hPad, vPad));
             button.AddThemeStyleboxOverride("focus", CreateBox(
                 darkHover, Palette.Accent, radius, hPad, vPad));
             button.AddThemeColorOverride("font_color", Palette.TextPrimary);
@@ -311,6 +326,12 @@ internal static class SolverUiTokens
                 Palette.Danger.Lightened(0.08f),
                 Palette.Danger.Darkened(0.18f),
                 Godot.Colors.White),
+            SolverButtonStyle.Ghost => (
+                Godot.Colors.Transparent,
+                Godot.Colors.Transparent,
+                Palette.SurfaceHover,
+                Palette.BorderSubtle,
+                Palette.TextPrimary),
             _ => (
                 Palette.Surface,
                 Palette.Border,
