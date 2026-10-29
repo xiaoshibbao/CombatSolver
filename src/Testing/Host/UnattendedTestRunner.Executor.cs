@@ -41,6 +41,16 @@ internal sealed partial class UnattendedTestRunner
             bool expectedCardPlayed = request.ExpectedPlayedCardId == null;
             bool expectedPotionUsed = request.ExpectedUsedPotionId == null;
             bool expectedPlayerPowerObserved = request.ExpectedObservedPlayerPowerId == null;
+            if (request.ScenarioId == "RUN-DECISIONS")
+            {
+                await runner.AssertRunDecisionsAsync(player);
+                return Observation(combatEnded: false);
+            }
+            if (request.ScenarioId == "RUN-DECISION-ROOMS")
+            {
+                await runner.AssertRunDecisionRoomsAsync(player);
+                return Observation(combatEnded: false);
+            }
             if (request.ScenarioId == "CHECKPOINT-PROFILE-CONTRACT")
             {
                 runner.AssertCheckpointProfileContract(combatState);

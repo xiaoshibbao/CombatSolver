@@ -1548,6 +1548,14 @@ throw [TimeoutException]::new("Unattended test exceeded the launcher timeout; it
             } finally {
                 $launcherLock.Dispose()
                 if ($CleanupInstanceOnExit.IsPresent) {
+                    if ($EvidenceDirectory) {
+                        foreach ($logName in @('godot-headless.log', 'native-stdout.log', 'native-stderr.log')) {
+                            $nativeLog = Join-Path $headlessRoot $logName
+                            if (Test-Path -LiteralPath $nativeLog -PathType Leaf) {
+                                Copy-Item -LiteralPath $nativeLog -Destination (Join-Path $EvidenceDirectory $logName) -Force
+                            }
+                        }
+                    }
                     Remove-HeadlessRuntimeInstance $runtimeContext
                 }
             }

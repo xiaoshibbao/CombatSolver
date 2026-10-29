@@ -38,6 +38,8 @@ Coding agent 运行无头游戏测试时必须加 `-CleanupInstanceOnExit`，Bas
 
 默认 DLL 来自本 worktree 的 Release 产物、manifest 来自仓库根；`--combat-solver-build-dir` / `-CombatSolverBuildDir` 可以指定包含 DLL 和 manifest 的冻结构建目录（Windows 还需要该构建的 MemoryCleaner）。其他游戏文件和 Mod 从指定源游戏复制，RitsuLib 从指定依赖路径复制；完整内容身份参与复用判断。构建、依赖或源游戏变化时，只停本实例精确认领的旧游戏，再发布新快照。Linux 优先 reflink；旧游戏快照移动到实例内 retired 目录，保留可回收证据，不自动删除用户目录。
 
+源游戏根下的 `.combatsolver-precombat` 是预战 worker 的临时输出，两平台均从快照身份与复制中排除，避免它在复制期间清理导致失败。Windows 可运行 `tools/testing/test-headless-runtime.ps1 -SnapshotOnly` 单独检查来源缓存和临时目录排除，不启动游戏。显式指定 EvidenceDirectory 且清理实例时，启动器先保留 Godot/native 退出日志，再删除已认领实例，便于诊断进程未写结果就退出的情况。
+
 ## 排队、复用与资源
 
 - 默认 `exclusive`：等待其他已登记实例退出；`parallel` 显式启用，当前最多同时两个游戏。队列超时默认 120 秒，与实际场景的超时分开。

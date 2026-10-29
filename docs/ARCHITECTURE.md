@@ -24,6 +24,7 @@
 | `SearchMemoryPressureSignal.cs` | 注入 Search 的分配边界与回收续搜信号 |
 | `NativeChoiceRuntime.cs` | 原生选牌观察与逐实例计划匹配 |
 | `PlayerTurnSetupPatches.cs` | 原生回合准备、选择和部署交接 |
+| `RunDecisionController.cs` / `RunDecisionCapture.cs` / `RunEventDecisionCapture.cs` | 局外页面与跑局快照、候选覆盖合同、状态失效检查和原生选择/购买/删牌部署 |
 
 政策由主线程从设置冻结到 `SearchPolicySnapshot`。后台通过请求参数、诊断 sink 与压力信号消费外部能力；算法不读取设置单例或操作 GC。Power 显示变量在主线程根捕获时物化；worker 只消费已物化值。克隆并发边界由 `BaseLibCloneConcurrencyPatch` 与原生克隆隔离规则维护。
 
@@ -34,6 +35,8 @@
 结束回合与出牌共用原生执行动作捕获，按 OwnerId 对齐本地玩家并等待实际 CompletionTask；结束动作完成还须确认原生 ready 状态或已离开原可出牌回合。原生短暂拒绝时只在完整 live 状态未变的同回合内有限重试，5秒仍不接受则显式失败，不消费回合末选择或显示执行完成。重评估前排空真实动作队列。缺少结束边界的稳定推荐先由模拟补齐，挂起选择和未知效果不自动越过。
 
 ## 3. Search
+
+局外策略独立放在 `src/RunPlanning/RunDecisionPolicy.cs`：只收值快照，不引用游戏 Model、Godot、设置单例或 Runtime；评分和可负担组合不使用战斗 Beam 的预算或状态等价。`RunDecisionPanel` 只渲染只读视图，实际操作委托回 Runtime。范围与限制见[局外决策](run-decisions.md)。
 
 | 入口 | 所有权 |
 | --- | --- |

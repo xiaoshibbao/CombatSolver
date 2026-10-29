@@ -5,6 +5,9 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repository_root="$(cd -- "$script_dir/../.." && pwd)"
 search_root="$repository_root/src/Search"
 violations=()
+if rg -n --glob '*.cs' '\b(Godot|MegaCrit|SolverSettings|SolverController|RunDecisionController|RunManager)\b|Entry\.Logger' "$repository_root/src/RunPlanning"; then
+    violations+=("Run planning must consume value snapshots only")
+fi
 for corpus_input in tools/search/StrategyCorpus/run.py tools/search/StrategyCorpus/compare.py coverage/corpora/strategy/p0.json; do
     [[ -f "$repository_root/$corpus_input" ]] || violations+=("Strategy corpus input missing: $corpus_input")
 done

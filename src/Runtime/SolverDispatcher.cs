@@ -55,6 +55,8 @@ internal sealed partial class SolverDispatcher : Node
         {
             SolverController.MonitorCombatPresence();
             SolverController.RefreshSearchProgress();
+            if (NGame.Instance is { } host)
+                RunDecisionController.Poll(host);
         }
         if (PerformanceRecording.Enabled)
             PerformanceRecording.Dispatcher(Stopwatch.GetElapsedTime(now).TotalMilliseconds,
@@ -64,6 +66,7 @@ internal sealed partial class SolverDispatcher : Node
     public override void _ExitTree()
     {
         SolverController.Reset("host_exit");
+        RunDecisionController.Reset();
         if (ReferenceEquals(_instance, this))
             _instance = null;
     }

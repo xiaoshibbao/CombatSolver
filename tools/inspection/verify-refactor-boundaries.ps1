@@ -28,6 +28,12 @@ $forbiddenSearchReferences = @(
 )
 
 $violations = [System.Collections.Generic.List[string]]::new()
+$runPlanningRoot = Join-Path $repositoryRoot 'src/RunPlanning'
+foreach ($runPlanningFile in Get-ChildItem -LiteralPath $runPlanningRoot -Filter '*.cs' -File -Recurse) {
+    if (Select-String -LiteralPath $runPlanningFile.FullName -Pattern '\b(Godot|MegaCrit|SolverSettings|SolverController|RunDecisionController|RunManager)\b|Entry\.Logger' -Quiet) {
+        $violations.Add("Run planning must consume value snapshots only: $($runPlanningFile.Name)")
+    }
+}
 foreach ($relative in @('tools/search/StrategyCorpus/run.py', 'tools/search/StrategyCorpus/compare.py', 'coverage/corpora/strategy/p0.json')) {
     if (-not (Test-Path -LiteralPath (Join-Path $repositoryRoot $relative) -PathType Leaf)) {
         $violations.Add("Strategy corpus input missing: $relative")

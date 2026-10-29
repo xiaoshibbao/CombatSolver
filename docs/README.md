@@ -14,6 +14,7 @@
 | [生成场景](GENERATED_COMBAT_SCENARIOS.md) | 场景生成与材料 |
 | [第三方适配](third-party/README.md) | 外部登记合同与封闭入口 |
 | [遗物计数](relic-counters.md) | 玩家战略目标 |
+| [局外决策](run-decisions.md) | 奖励、商店和事件的推荐、可选自动执行与覆盖边界 |
 | [多人支持](multiplayer.md) | 本地多人版本的使用、预测条件、复跑方法与本轮证据 |
 | [多人历史](archive/multiplayer/README.md) | 上游归档的需求与验收记录 |
 | [问题](issues/README.md) / [社区验收](community/testing-guide.md) | 未解决问题和贡献证据 |

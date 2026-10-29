@@ -1,7 +1,7 @@
 #requires -Version 7.4
 # No game is launched. Host capacity and the game-name census are controlled
 # fixtures; launcher identity validation still uses the real pwsh process.
-param([switch]$ProfileOnly)
+param([switch]$ProfileOnly, [switch]$SnapshotOnly)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'headless-runtime.ps1')
 
@@ -99,8 +99,15 @@ try {
         (Join-Path $snapshotBuild 'CombatSolver.MemoryCleaner.exe'),
         $snapshotRitsu, (Join-Path $snapshotRitsu 'mod_manifest.json'))
     $firstPlan = Get-HeadlessSnapshotPlan @snapshotArgs
+    $workerCopies = Join-Path $snapshotSource '.combatsolver-precombat/process-fixture/startup-mods'
+    New-Item -ItemType Directory -Path $workerCopies -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $workerCopies 'transient.dll') -Value 'not-a-game-input'
+    $withoutWorkerCopies = Get-HeadlessSnapshotPlan @snapshotArgs
+    Assert-HostFixture ($firstPlan.id -eq $withoutWorkerCopies.id) 'transient worker copies changed game provenance'
     Assert-HostFixture ($firstPlan.cacheHits -eq 0 -and $firstPlan.hashedFiles -gt 0) 'first snapshot reused uncached hashes'
     Set-HeadlessGameSnapshot $snapshotContext $firstPlan
+    Assert-HostFixture (-not (Test-Path -LiteralPath (Join-Path $snapshotContext.GameRoot '.combatsolver-precombat'))) `
+        'snapshot copied transient pre-combat worker state'
     $secondPlan = Get-HeadlessSnapshotPlan @snapshotArgs
     Assert-HostFixture ($secondPlan.id -eq $firstPlan.id -and $secondPlan.cacheHits -gt 0) 'unchanged game assets missed cache'
     $modTimestamp = (Get-Item -LiteralPath $otherMod).LastWriteTimeUtc
@@ -118,6 +125,10 @@ try {
     Assert-HostFixture ((Get-Content -LiteralPath (Join-Path $snapshotContext.GameRoot 'data.pck') -Raw).Trim() -eq 'asset-b') `
         'changed game asset was not patched into the fixed game instance'
     Remove-HeadlessRuntimeInstance $snapshotContext
+    if ($SnapshotOnly) {
+        Write-Output 'HEADLESS_SNAPSHOT_SELFTEST_PASS transient-worker-exclusion/game-content-cache'
+        return
+    }
     Write-Output 'HEADLESS_SNAPSHOT_CACHE_SELFTEST_PASS unchanged-assets/mod-rebuild/game-update'
 
     $a, $b, $c = $contexts

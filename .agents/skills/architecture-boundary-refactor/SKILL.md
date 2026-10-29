@@ -29,6 +29,8 @@ description: 重构 CombatSolver 的 Search、Runtime 会话、UI snapshot、无
 
 ## 2. 当前结构约束
 
+- 局外候选评分与购物组合属于 `src/RunPlanning`，只处理值快照；RunDecisionCapture/Controller/EventCapture 在 Runtime 捕获、核对页面身份并通过原生入口执行，RunDecisionPanel 只收只读视图。未知效果不能冒充跳过/零收益，也不能自动执行。不要让局外评分读取 Godot、设置单例或真实 Model，不把局外启发式结果包装成战斗精确预测。
+
 - 本地多人支持复用现有 Runtime/Search/Engine 分层。Runtime 按原版参与资格授权本地动作，Search 的 `AdvanceRound` 只在本地重新参与后返回候选枚举，`CurrentTurnPlayers` 与全玩家状态共同属于分支；不能把队友独占额外回合退化成本地回合。多人 Host 建局和 Contracts/Combat 差分继续使用现有 partial 类型，ENet 与无求解器对端工具归 tools/testing。
 
 - 预战 worker 身份由 `Entry.IsPreCombatWorker` 在启动时冻结；Dispatcher 保留完成邮箱和无人协议，仅跳过玩家战斗 UI 监控。API 可用性与启动期 Mod 钉住共用该身份，避免嵌套 worker。

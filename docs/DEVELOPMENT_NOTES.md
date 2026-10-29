@@ -8,6 +8,18 @@
 
 ## 下一版本（开发中）
 
+### 局外奖励、商店与事件建议
+
+新增独立的值快照策略层与局外面板。奖励比较加入牌组和跳过的边际收益；商店在可负担的可见候选中做组合搜索，包含删牌和留金币，执行一步后重捕获；事件使用显式效果合同。默认推荐、可持久切换自动，状态/价格/页面改变则拒绝旧推荐，自动仅用于覆盖合同通过的单人候选。未知替代奖励不当作免费跳过，未知事件不自动选第一项。评分是构筑启发式，并非通关率或战斗精确预测；当前事件合同为 `SUNKEN_TREASURY`、`ABYSSAL_BATHS`，其余覆盖和限制见[使用指南](run-decisions.md)。
+
+`RUN-DECISIONS` run `c1b535b3b6e74e95ac706677a04c9491` Passed（`.local/run-decisions/core-final`）：牌组角色缺口会改变推荐，冗余差牌输给跳过，预算选择组合而非单件贪心，排除未覆盖候选，移除诅咒、低血治疗、致死成本和默认/持久开关合同通过；实际奖励页面只在执行后完成原调用方的原生选择任务，推荐不改变全状态/RNG。
+
+测试启动暴露源游戏目录中的 `.combatsolver-precombat` 临时副本被当成游戏输入并在复制时消失，已在 PS/Bash 快照来源与复制时排除；PS `-SnapshotOnly` 自测通过（排除前后相同内容标识，快照不含临时副本）。完整基础设施自测另在 admission 超时断言失败，未计为通过。启动器在清理实例前保存 native/godot 日志到显式 EvidenceDirectory，避免原生退出丢失首个错误。
+
+完整商店场景在无头 Dummy 渲染器加载角色字体图标时退出：`.local/run-decisions/rooms-diagnostic`、`rooms-preloaded` 保留 `Invalid Task ID` / texture 错误，未视作商店界面验收。删牌夹具起初使用不可移除的 Greed，原生候选不含该实例，保护按预期拒绝，证据 `rooms-native-final`；改用合法的同名打击副本后，`RUN-DECISION-ROOMS` run `b6cb90ec074e458d83f2d5f99d0d4fa0` Passed（`rooms-legal`）：商店原生业务入口按实际价格扣款、原生页面移除确切实例；事件先只推荐，再通过开启自动实际取得小箱金币，没有额外诅咒。未证明完整商店可见布局。
+
+最终策略补充不可移除诅咒的永久成本，`RUN-DECISIONS` run `bdad0adc7c8e40aabedc765468e5c862` Passed（`.local/run-decisions/core-complete`），包含资源变化令旧推荐戳失效。一次构建/快照并行被内容一致性门禁拒绝，未启动游戏（`rooms-removable/launcher-result.json`），已改为完成构建后启动。工具检查与 PS 结构门禁通过；Linux 原生运行和可见面板未验收。
+
 ### 原生结束回合被拒绝后误报完成
 
 用户反馈单人仍会显示“等待下一回合”却没有结束回合。本机安装的 HoldYourTurn 0.2.3 会在抽牌/获得能量后的保护窗口拦截 `SetReadyToEndTurn`，撤销 ready；原生 `EndPlayerTurnAction.ExecuteAction` 仍返回完成任务。此前等待 CompletionTask 不能证明请求生效，缺少原生确认。

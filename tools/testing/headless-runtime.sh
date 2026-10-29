@@ -291,7 +291,7 @@ hr_release() {
 hr_snapshot_id() {
     local source="$1" file
     {
-        (cd -- "$source" && find -L . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum --) || return 1
+        (cd -- "$source" && find -L . -path './.combatsolver-precombat' -prune -o -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum --) || return 1
         shift
         for file in "$@"; do
             if [[ -d $file ]]; then
@@ -311,7 +311,13 @@ hr_prepare_snapshot() {
     done
     if [[ -f $HR_ROOT/snapshot-id && $(<"$HR_ROOT/snapshot-id") == "$expected" && -d $HR_ROOT/game ]]; then return 0; fi
     staging="$(mktemp -d --tmpdir="$HR_ROOT" snapshot.XXXXXX)" || return 1
-    cp -aL --reflink=auto -- "$source/." "$staging/" || return 1
+    (
+        shopt -s dotglob nullglob
+        for source_entry in "$source"/*; do
+            [[ ${source_entry##*/} != .combatsolver-precombat ]] || continue
+            cp -aL --reflink=auto -- "$source_entry" "$staging/" || exit 1
+        done
+    ) || return 1
     for directory in "$staging/mods/CombatSolver" "$staging/mods/CombatSolverHeadlessRitsuLib"; do
         [[ ! -e $directory ]] || rm -rf -- "$directory" || return 1
         mkdir -p -- "$directory" || return 1

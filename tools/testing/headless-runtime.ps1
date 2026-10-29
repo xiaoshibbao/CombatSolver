@@ -186,7 +186,14 @@ function Get-HeadlessSnapshotPlan(
     Assert-HeadlessNoReparsePoint $RitsuRoot
     $enumeratedSources = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $sources = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
-    foreach ($item in Get-ChildItem -LiteralPath $Context.SourceGameRoot -Recurse -Force) {
+    # Pre-combat workers pin transient DLL copies here while the visible game is
+    # alive. They are runtime output, not game inputs, and can disappear mid-copy.
+    $gameSources = foreach ($sourceEntry in Get-ChildItem -LiteralPath $Context.SourceGameRoot -Force) {
+        if ($sourceEntry.Name -eq '.combatsolver-precombat') { continue }
+        $sourceEntry
+        if ($sourceEntry.PSIsContainer) { Get-ChildItem -LiteralPath $sourceEntry.FullName -Recurse -Force }
+    }
+    foreach ($item in $gameSources) {
         if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
             throw "Cannot freeze a game tree containing a reparse point: $($item.FullName)"
         }

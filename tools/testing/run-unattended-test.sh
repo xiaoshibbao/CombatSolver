@@ -1075,6 +1075,12 @@ cleanup_owned_launcher() {
     fi
     hr_release
     if ((option_value[cleanup-instance-on-exit] == 1)); then
+        if [[ -n ${option_value[evidence-directory]} ]]; then
+            mkdir -p -- "${option_value[evidence-directory]}"
+            for native_log in godot-headless.log launcher.log native-stdout.log native-stderr.log; do
+                [[ ! -f "$headless_root/$native_log" ]] || cp -- "$headless_root/$native_log" "${option_value[evidence-directory]}/$native_log"
+            done
+        fi
         [[ -z ${launcher_lock_fd:-} ]] || exec {launcher_lock_fd}>&-
         unset HR_INSTANCE_FD
         if ! hr_remove_instance; then
