@@ -144,8 +144,6 @@ internal sealed partial class CombatBeamSolver
                 nameof(_minimumPotionUses),
                 "最少用药数必须非负且不能超过最多用药数。");
         }
-        if (root.PlayerCount != 1)
-            throw new NotSupportedException("第一版只支持单人战斗。");
         if (root.Enemies.Count > 64)
             throw new NotSupportedException("单场战斗超过 64 个敌人，无法编码路线存活位图。");
         PlayerTurnPhase requiredPhase = _includeTurnSetup
@@ -206,6 +204,7 @@ internal sealed partial class CombatBeamSolver
         bool currentTurnAdoptionReached = false;
         int initialHp = root.InitialPlayerHp;
         int searchedTurnLayers = 0;
+        SearchNode?[] multiplayerStyleRoutes = new SearchNode?[3];
         bool timeBudgetReached = false;
         // 连续无进展的内存回收已用尽本搜索的额度：提前收手，交给既有终局发布当前前沿的最优路线。
         bool memoryNoProgressTruncated = false;
@@ -318,6 +317,47 @@ internal sealed partial class CombatBeamSolver
                     return current;
             }
             return null;
+        }
+
+        SimulationSnapshot CurrentTurnSnapshot(SearchNode node)
+            => FindCurrentTurnBoundary(node)?.Snapshot ?? node.Snapshot;
+
+        int CurrentTurnSetup(SearchNode node)
+        {
+            SimulationSnapshot snapshot = CurrentTurnSnapshot(node);
+            return snapshot.PersistentBuffValue + snapshot.LatentSetupValue;
+        }
+
+        bool BetterMultiplayerFirstTurn(
+            SearchNode candidate, SearchNode? existing, MultiplayerPlanStyle style)
+        {
+            if (existing == null)
+                return true;
+            return style switch
+            {
+                MultiplayerPlanStyle.Output => (
+                    candidate.CumulativeEnemyHpLost,
+                    candidate.Snapshot.ProjectedPlayerHp,
+                    CurrentTurnSetup(candidate)).CompareTo((
+                    existing.CumulativeEnemyHpLost,
+                    existing.Snapshot.ProjectedPlayerHp,
+                    CurrentTurnSetup(existing))) > 0,
+                MultiplayerPlanStyle.Defense => (
+                    candidate.Snapshot.ProjectedPlayerHp,
+                    candidate.CumulativeEnemyHpLost,
+                    CurrentTurnSetup(candidate)).CompareTo((
+                    existing.Snapshot.ProjectedPlayerHp,
+                    existing.CumulativeEnemyHpLost,
+                    CurrentTurnSetup(existing))) > 0,
+                MultiplayerPlanStyle.Setup => (
+                    CurrentTurnSetup(candidate),
+                    candidate.Snapshot.ProjectedPlayerHp,
+                    candidate.CumulativeEnemyHpLost).CompareTo((
+                    CurrentTurnSetup(existing),
+                    existing.Snapshot.ProjectedPlayerHp,
+                    existing.CumulativeEnemyHpLost)) > 0,
+                _ => throw new InvalidOperationException("Unknown multiplayer plan style."),
+            };
         }
 
         int requiredPotionUses = Math.Max(_minimumPotionUses,
@@ -489,6 +529,17 @@ internal sealed partial class CombatBeamSolver
                 materializedNode = blockPotionInsertion.Node;
                 materializedAnnotations = blockPotionInsertion.Annotations;
             }
+            bool supportAdded = false;
+            MultiplayerSupportInsertion? supportInsertion;
+            while (resultScope == SolverResultScope.SearchCompletion
+                   && (supportInsertion = TryAppendPureSupport(
+                       materializedNode, materializedAnnotations, stopwatch)) != null)
+            {
+                materializedNode.Snapshot.ReleaseSimulator();
+                materializedNode = supportInsertion.Node;
+                materializedAnnotations = supportInsertion.Annotations;
+                supportAdded = true;
+            }
             FinalPlanCandidate selectedCandidate = publishedCandidate with
             {
                 Node = materializedNode,
@@ -498,6 +549,7 @@ internal sealed partial class CombatBeamSolver
                 BattleSold = battleDamage.SoldHpCommitted + materializedNode.FutureSoldHp,
                 PotionCount = materializedNode.PotionCount,
                 Score = blockPotionInsertion == null && afterimageFrontloading == null
+                    && !supportAdded
                     ? publishedCandidate.Score
                     : materializedNode.Score,
             };
@@ -671,6 +723,11 @@ internal sealed partial class CombatBeamSolver
             ValidateOrderedMutationAdmissionLedger(_run);
             SolverResult result = new()
             {
+                IsMultiplayer = root.PlayerCount > 1,
+                MultiplayerEffectiveDamage = best.CumulativeEnemyHpLost,
+                MultiplayerSetupValue = CurrentTurnSetup(best),
+                MultiplayerCurrentTurnProjectedHp = CurrentTurnSnapshot(best).ProjectedPlayerHp,
+                MultiplayerSupportAdded = supportAdded,
                 ResultScope = resultScope,
                 DeterministicBlockPotionInserted = blockPotionInsertion != null,
                 TotalSearchElapsed = stopwatch.Elapsed,
@@ -1477,6 +1534,7 @@ internal sealed partial class CombatBeamSolver
         }
 
         while (frontier.Count > 0
+            && searchedTurnLayers < policy.MaxTurnLayers
             && (_earlyTurnScoutDepth == 0 || searchedTurnLayers < _earlyTurnScoutDepth)
             && (!policy.VerifyIncrementalSearch
                 || searchedTurnLayers < SolverWeights.IncrementalVerificationMaxTurns)
@@ -2056,6 +2114,35 @@ internal sealed partial class CombatBeamSolver
             List<SearchNode> unannotatedEnded = ended;
             ended = AnnotateTurnOutcomes(unannotatedEnded);
             ReleaseDroppedSnapshots(unannotatedEnded, ended);
+            SearchNode?[] layerMultiplayerRoutes = new SearchNode?[3];
+            if (root.PlayerCount > 1)
+            {
+                foreach (SearchNode candidate in ended)
+                {
+                    SearchNode? boundary = FindCurrentTurnBoundary(candidate);
+                    if (boundary == null || boundary.Snapshot.PlayerDead
+                        || boundary.Snapshot.ProjectedPlayerHp <= 0)
+                        continue;
+                    for (int style = 0; style < layerMultiplayerRoutes.Length; style++)
+                    {
+                        SearchNode? existing = layerMultiplayerRoutes[style];
+                        SearchNode? existingBoundary = existing == null
+                            ? null : FindCurrentTurnBoundary(existing)
+                                ?? throw new InvalidOperationException(
+                                    "Multiplayer route representative has no current-turn boundary.");
+                        if (BetterMultiplayerFirstTurn(
+                                boundary, existingBoundary, (MultiplayerPlanStyle)style)
+                            || existing != null
+                                && !BetterMultiplayerFirstTurn(
+                                    existingBoundary!, boundary, (MultiplayerPlanStyle)style)
+                                && candidate.Score > existing.Score)
+                            layerMultiplayerRoutes[style] = candidate;
+                    }
+                }
+                for (int style = 0; style < layerMultiplayerRoutes.Length; style++)
+                    multiplayerStyleRoutes[style] = layerMultiplayerRoutes[style]
+                        ?? multiplayerStyleRoutes[style];
+            }
             if (_earlyTurnScoutObserver != null
                 && searchedTurnLayers < _earlyTurnScoutDepth)
             {
@@ -2090,6 +2177,15 @@ internal sealed partial class CombatBeamSolver
                 ? []
                 : PruneAtMemoryBoundary(ended.Where(node => !node.IsTerminal),
                     turnPruneCandidateCount, "before_turn_prune", playDepth: 0, ended.Count);
+            if (!acceptableBattleHpLossReached)
+            {
+                foreach (SearchNode? representative in layerMultiplayerRoutes)
+                {
+                    if (representative is { IsTerminal: false }
+                        && !frontier.Contains(representative))
+                        frontier.Add(representative);
+                }
+            }
             // 续用戳只供最终选中路线，淘汰候选无需提前拼接字符串。
             List<SearchNode> retainedAfterRound = [.. completed, .. frontier];
             ReleaseDroppedSnapshots(ended, retainedAfterRound);
@@ -2261,6 +2357,15 @@ internal sealed partial class CombatBeamSolver
         }
         List<SearchNode> finalCandidates = Retention.RankFinal(finalPool);
         ReleaseDroppedSnapshots(finalPool, finalCandidates);
+        if (root.PlayerCount > 1)
+        {
+            foreach (SearchNode? representative in multiplayerStyleRoutes)
+            {
+                if (representative != null && !finalCandidates.Any(candidate =>
+                        candidate.Actions.SequenceEqual(representative.Actions)))
+                    finalCandidates.Add(RefreshReleasedFallback(representative));
+            }
+        }
         try
         {
             ValidateHistoricalSimulatorsReleased(finalCandidates);
@@ -2276,15 +2381,74 @@ internal sealed partial class CombatBeamSolver
                 evaluated,
                 initialHp,
                 emitDiagnostics: true);
-            return MaterializeSelectedRoute(
-                ordering,
-                onlyDeathRoutesFound,
-                currentTurnAdoptionReached
-                    ? SolverResultScope.CurrentTurnAdoption
-                    : SolverResultScope.SearchCompletion,
-                searchedTurnLayers,
-                timeBudgetReached,
-                memoryNoProgressTruncated);
+            SolverResultScope scope = currentTurnAdoptionReached
+                ? SolverResultScope.CurrentTurnAdoption
+                : SolverResultScope.SearchCompletion;
+            if (root.PlayerCount == 1 || scope != SolverResultScope.SearchCompletion)
+                return MaterializeSelectedRoute(ordering, onlyDeathRoutesFound, scope,
+                    searchedTurnLayers, timeBudgetReached, memoryNoProgressTruncated);
+
+            var viable = evaluated.Where(candidate => !candidate.Snapshot.PlayerDead
+                && candidate.Snapshot.ProjectedPlayerHp > 0).ToArray();
+            if (viable.Length == 0)
+                return MaterializeSelectedRoute(ordering, onlyDeathRoutesFound, scope,
+                    searchedTurnLayers, timeBudgetReached, memoryNoProgressTruncated);
+
+            static PlanAction[] CurrentTurnActions(SearchNode node, int turn)
+                => node.Actions.Where(action => action.Turn == turn).ToArray();
+            List<(MultiplayerPlanStyle Style, SearchNode Node, SimulationSnapshot Snapshot)> styles = [];
+            foreach (MultiplayerPlanStyle style in Enum.GetValues<MultiplayerPlanStyle>())
+            {
+                IEnumerable<(SearchNode Node, SimulationSnapshot Snapshot)> ranked = style switch
+                {
+                    MultiplayerPlanStyle.Output => viable
+                        .OrderByDescending(candidate => candidate.Node.CumulativeEnemyHpLost)
+                        .ThenBy(candidate => candidate.Snapshot.EnemyHp)
+                        .ThenByDescending(candidate => candidate.Snapshot.ProjectedPlayerHp),
+                    MultiplayerPlanStyle.Defense => viable
+                        .OrderByDescending(candidate => CurrentTurnSnapshot(candidate.Node).ProjectedPlayerHp)
+                        .ThenByDescending(candidate => candidate.Node.Outcome?.Turn ?? _startTurnNumber)
+                        .ThenBy(candidate => candidate.Snapshot.CumulativePlayerHpLost)
+                        .ThenByDescending(candidate => candidate.Node.CumulativeEnemyHpLost),
+                    MultiplayerPlanStyle.Setup => viable
+                        .OrderByDescending(candidate => CurrentTurnSetup(candidate.Node))
+                        .ThenByDescending(candidate => candidate.Node.Outcome?.Turn ?? _startTurnNumber)
+                        .ThenByDescending(candidate => candidate.Snapshot.ProjectedPlayerHp)
+                        .ThenByDescending(candidate => candidate.Node.CumulativeEnemyHpLost),
+                    _ => throw new ArgumentOutOfRangeException(nameof(style), style, null),
+                };
+                foreach (var candidate in ranked)
+                {
+                    if (style == MultiplayerPlanStyle.Defense
+                        && CurrentTurnSnapshot(candidate.Node).ProjectedPlayerHp
+                            <= styles.Max(existing => CurrentTurnSnapshot(existing.Node).ProjectedPlayerHp))
+                        break;
+                    if (style == MultiplayerPlanStyle.Setup
+                        && CurrentTurnSetup(candidate.Node)
+                            <= styles.Max(existing => CurrentTurnSetup(existing.Node)))
+                        break;
+                    PlanAction[] actions = CurrentTurnActions(candidate.Node, _startTurnNumber);
+                    if (styles.Any(existing => CurrentTurnActions(existing.Node, _startTurnNumber)
+                            .SequenceEqual(actions)))
+                        continue;
+                    styles.Add((style, candidate.Node, candidate.Snapshot));
+                    break;
+                }
+            }
+            if (styles.Count == 0)
+                throw new InvalidOperationException("Multiplayer search found viable candidates but no plan style.");
+            List<SolverResult> plans = new(styles.Count);
+            foreach (var item in styles)
+            {
+                FinalPlanSelection chosen = FinalOrdering.Select(
+                    [(item.Node, item.Snapshot)], initialHp, emitDiagnostics: false);
+                SolverResult plan = MaterializeSelectedRoute(chosen, onlyDeathRoutesFound,
+                    scope, searchedTurnLayers, timeBudgetReached, memoryNoProgressTruncated);
+                plan.MultiplayerStyle = item.Style;
+                plans.Add(plan);
+            }
+            plans[0].MultiplayerAlternatives = plans.Skip(1).ToArray();
+            return plans[0];
         }
         finally
         {
@@ -2419,6 +2583,8 @@ internal sealed partial class CombatBeamSolver
         SimulatedCombatState combat = (SimulatedCombatState)simulator.State.CombatState;
         if (action.Kind == PlanActionKind.EndTurn)
             return true;
+        if (action.TargetCombatId != null && combat.GetCreature(action.TargetCombatId) == null)
+            return false;
         if (action.Kind == PlanActionKind.UsePotion)
         {
             return EnumeratePlannedPotionActions(new ExpansionPlan(node, CardNameFirst: false))

@@ -22,6 +22,15 @@ internal enum SolverOverlayActionVisualKind
     Potion,
 }
 
+internal sealed record SolverMultiplayerOptionSnapshot(
+    MultiplayerPlanStyle Style,
+    int CurrentTurnDamage,
+    int CurrentTurnHpChange,
+    int ProjectedHp,
+    int EnergyLeft,
+    int SetupValue,
+    bool Selected);
+
 internal sealed record SolverOverlayActionSnapshot(
     string Title,
     string TargetName,
@@ -252,6 +261,9 @@ internal sealed record SolverOverlaySnapshot(
         string summaryText = result.CombatEndedTurn == startTurnNumber
             ? SolverText.Format($"[color={SolverUiTokens.Palette.SuccessHex}]本回合结束战斗  │  {confidence}[/color]")
             : SolverText.Format($"[color={SolverUiTokens.Palette.TextSecondaryHex}]预计路线 [b]{searchedTurns}[/b] 回合  │  {confidence}[/color]");
+        if (result.MultiplayerStyle != null)
+            summaryText += "\n" + SolverText.Format(
+                $"[color={SolverUiTokens.Palette.TextSecondaryHex}]条件预测：队友后续不主动出牌；仅安排自己的动作。[/color]");
         double searchElapsedSeconds = result.TotalSearchElapsed.TotalSeconds;
         long searchWorldlines = result.TotalExpandedNodes > 0
             ? result.TotalExpandedNodes
@@ -576,7 +588,7 @@ internal sealed record SolverOverlaySnapshot(
             SolverText.Format($"[color={SolverUiTokens.Palette.TextMutedHex}]战损[/color]  本局已发生 {alreadyLost}  │  路线未来卖血 {result.FutureSoldHp}  │  本局累计卖血 {result.SoldHp}"),
             SolverText.Format($"[color={SolverUiTokens.Palette.TextMutedHex}]药水[/color]  本局已喝 {result.BattlePotionsUsedSoFar} 瓶  │  路线还要用 {result.PotionCount} 瓶  │  预计省血 {result.PotionHpSaved}/{result.PotionHpRequired} HP  │  门槛淘汰 {result.PotionBranchesRejected}"),
             SolverText.Format($"[color={SolverUiTokens.Palette.TextMutedHex}]防守[/color]  本回合最高可起防 {result.MaxBlockByTurn.GetValueOrDefault(displayedTurn)}  │  路线实际起防 {result.ActualBlockByTurn.GetValueOrDefault(displayedTurn)}  │  卖血 {result.SoldHpByTurn.GetValueOrDefault(displayedTurn)}"),
-            SolverText.Format($"[color={SolverUiTokens.Palette.TextMutedHex}]边界[/color]  {BoundaryText(result.BoundaryReason)}  │  停止洗牌分支 {result.ShuffleBranchesPruned}  │  不可避免战损 {result.UnavoidableHpLost}"),
+            SolverText.Format($"[color={SolverUiTokens.Palette.TextMutedHex}]边界[/color]  {BoundaryText(result)}  │  停止洗牌分支 {result.ShuffleBranchesPruned}  │  不可避免战损 {result.UnavoidableHpLost}"),
         ];
         if (result.TheftPolicy is { } theftPolicy)
         {
@@ -633,7 +645,12 @@ internal sealed record SolverOverlaySnapshot(
         _ => null,
     };
 
-    private static string BoundaryText(SearchBoundaryReason reason) => reason switch
+    private static string BoundaryText(SolverResult result)
+    {
+        if (result.BoundaryReason == SearchBoundaryReason.PendingChoice
+            && result.BestNode.Actions.LastOrDefault()?.CardId == "TUTOR")
+            return SolverText.Get("等待队友选牌，结果确定后重算");
+        return result.BoundaryReason switch
     {
         SearchBoundaryReason.Shuffle => SolverText.Get("下次洗牌"),
         SearchBoundaryReason.NoCards => SolverText.Get("无牌可抽"),
@@ -646,6 +663,7 @@ internal sealed record SolverOverlaySnapshot(
         SearchBoundaryReason.TimeLimit => SolverText.Get("时间预算"),
         _ => SolverText.Get("战斗结束"),
     };
+    }
 
     private static string JoinCoverage(IReadOnlyList<string> entries)
     {

@@ -1093,6 +1093,7 @@ $expectedBeamFiles = @(
     "CombatBeamSolver.Expansion.Replay.cs",
     "CombatBeamSolver.FinalPlanOrdering.cs",
     "CombatBeamSolver.Models.cs",
+    "CombatBeamSolver.MultiplayerSupport.cs",
     "CombatBeamSolver.NoveltySearch.cs",
     "CombatBeamSolver.Transpositions.cs",
     "CombatBeamSolver.OrderedMutationRetention.cs",
@@ -1802,7 +1803,7 @@ foreach ($check in @(
     @{ Path = $unattendedAssertionsPath; Text = "private sealed class Assertions(" },
     @{ Path = $unattendedAssertionsPath; Text = "public async Task RunBeforeExecutionAsync(ScenarioContext scenario)" },
     @{ Path = $unattendedAssertionsPath; Text = "public void AssertAfterExecution(ScenarioContext scenario, ExecutionOutcome outcome)" },
-    @{ Path = $unattendedExecutorPath; Text = "private sealed class Executor(" },
+    @{ Path = $unattendedExecutorPath; Text = "private sealed partial class Executor(" },
     @{ Path = $unattendedExecutorPath; Text = "public async Task<ExecutionOutcome> ExecuteAsync(ScenarioContext scenario)" },
     @{ Path = $unattendedExecutorPath; Text = "private FastModeType? ApplySettingsOverrides()" },
     @{ Path = $unattendedExecutorPath; Text = "public void RestoreSettings()" })) {
@@ -2148,7 +2149,7 @@ if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/Comb
 if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.CycleReplay.cs') -SimpleMatch '_replayWork.TryConsumeCycleReplayAction()' -Quiet)) {
     $violations.Add('Loop budget/history ownership changed: src/Search/CombatBeamSolver.CycleReplay.cs')
 }
-if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Runtime/CombatRootSnapshot.cs') -SimpleMatch 'playerState.AllCards.Cast<AbstractModel>()' -Quiet)) {
+if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Runtime/CombatRootSnapshot.cs') -SimpleMatch 'state.Players.SelectMany(member => member.PlayerCombatState?.AllCards' -Quiet)) {
     $violations.Add('Loop budget/history ownership changed: src/Runtime/CombatRootSnapshot.cs')
 }
 if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.StateEvaluation.cs') -SimpleMatch '_historyDependencies' -Quiet)) {
@@ -2275,6 +2276,16 @@ if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'CombatSolver.cs
 foreach ($member in @('private sealed record KnownRoutePrefix(', 'private static MoveStateSnapshot[] CaptureKnownRouteRootStates(', 'private static KnownRoutePrefix FreezeKnownRoutePrefix(', 'private void AssertKnownRouteAliasSnapshot(')) {
     if (-not (Select-String -LiteralPath (Join-Path $maintainedTestingRoot 'Support/UnattendedTestRunner.RouteSnapshots.cs') -SimpleMatch $member -Quiet)) {
         throw "Missing shared route snapshot helper: $member"
+    }
+}
+foreach ($contract in @(
+    @{ Path = 'src/Search/CombatBeamSolver.Expansion.Replay.cs'; Text = 'extraTurnPlayers = endingPlayers.Where' },
+    @{ Path = 'src/Search/CombatBeamSolver.Expansion.Replay.cs'; Text = '!simulatedCombat.IsCurrentTurnParticipant(_player)' },
+    @{ Path = 'src/Runtime/SolverController.cs'; Text = '!CombatManager.Instance.IsPartOfPlayerTurn(player)' },
+    @{ Path = 'src/Testing/Contracts/Combat/UnattendedTestRunner.Executor.Multiplayer.cs'; Text = 'ExecuteEnetRemoteExtraTurnAsync' }
+)) {
+    if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot $contract.Path) -SimpleMatch $contract.Text -Quiet)) {
+        throw "Missing multiplayer turn ownership contract: $($contract.Path): $($contract.Text)"
     }
 }
 Write-Output "REFACTOR_BOUNDARIES_OK search_files=$($searchFiles.Count)"

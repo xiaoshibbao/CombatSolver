@@ -971,6 +971,7 @@ expected_beam_files=(
     CombatBeamSolver.Expansion.Replay.cs
     CombatBeamSolver.FinalPlanOrdering.cs
     CombatBeamSolver.Models.cs
+    CombatBeamSolver.MultiplayerSupport.cs
     CombatBeamSolver.NoveltySearch.cs
     CombatBeamSolver.Transpositions.cs
     CombatBeamSolver.OrderedMutationRetention.cs
@@ -1427,7 +1428,7 @@ src/Testing/Host/UnattendedTestRunner.ScenarioBuilder.cs	public CombatState? Com
 src/Testing/Host/UnattendedTestRunner.Assertions.cs	private sealed class Assertions(
 src/Testing/Host/UnattendedTestRunner.Assertions.cs	public async Task RunBeforeExecutionAsync(ScenarioContext scenario)
 src/Testing/Host/UnattendedTestRunner.Assertions.cs	public void AssertAfterExecution(ScenarioContext scenario, ExecutionOutcome outcome)
-src/Testing/Host/UnattendedTestRunner.Executor.cs	private sealed class Executor(
+src/Testing/Host/UnattendedTestRunner.Executor.cs	private sealed partial class Executor(
 src/Testing/Host/UnattendedTestRunner.Executor.cs	public async Task<ExecutionOutcome> ExecuteAsync(ScenarioContext scenario)
 src/Testing/Host/UnattendedTestRunner.Executor.cs	private FastModeType? ApplySettingsOverrides()
 src/Testing/Host/UnattendedTestRunner.Executor.cs	public void RestoreSettings()
@@ -1702,7 +1703,7 @@ done
 
 require_fixed "$repository_root/src/Search/CombatBeamSolver.cs" 'policy.RequestWorkTotals ?? new()' 'loop budget/history ownership changed'
 require_fixed "$repository_root/src/Search/CombatBeamSolver.CycleReplay.cs" '_replayWork.TryConsumeCycleReplayAction()' 'loop budget/history ownership changed'
-require_fixed "$repository_root/src/Runtime/CombatRootSnapshot.cs" 'playerState.AllCards.Cast<AbstractModel>()' 'loop budget/history ownership changed'
+require_fixed "$repository_root/src/Runtime/CombatRootSnapshot.cs" 'state.Players.SelectMany(member => member.PlayerCombatState?.AllCards' 'loop budget/history ownership changed'
 require_fixed "$repository_root/src/Search/CombatBeamSolver.StateEvaluation.cs" '_historyDependencies' 'loop budget/history ownership changed'
 require_fixed "$repository_root/src/Search/CombatHistoryCounterKey.cs" 'simulator.History.GetCounters(owner)' 'history key must consume incremental totals'
 for history_file in CombatPredictionHistory.cs CombatPredictionHistory.CardContinuation.cs CombatPredictionHistory.ExecutionContinuation.cs; do
@@ -1778,4 +1779,16 @@ if grep -Fq 'ApplyReplayStateAsync(' "$repository_root/src/Testing/Replay/Unatte
     echo 'Native recorded replay must reconstruct state through native actions.' >&2
     exit 1
 fi
+for contract in \
+  'src/Search/CombatBeamSolver.Expansion.Replay.cs|extraTurnPlayers = endingPlayers.Where' \
+  'src/Search/CombatBeamSolver.Expansion.Replay.cs|!simulatedCombat.IsCurrentTurnParticipant(_player)' \
+  'src/Runtime/SolverController.cs|!CombatManager.Instance.IsPartOfPlayerTurn(player)' \
+  'src/Testing/Contracts/Combat/UnattendedTestRunner.Executor.Multiplayer.cs|ExecuteEnetRemoteExtraTurnAsync'; do
+    path="${contract%%|*}"
+    pattern="${contract#*|}"
+    if ! grep -Fq -- "$pattern" "$repository_root/$path"; then
+        printf 'Missing multiplayer turn ownership contract: %s\n' "$contract" >&2
+        exit 1
+    fi
+done
 printf 'REFACTOR_BOUNDARIES_OK search_files=%d\n' "${#search_files[@]}"

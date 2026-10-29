@@ -9,12 +9,21 @@ internal sealed partial class SolverSettingsPanel
     private CheckButton _beamWidthPortfolioEnabled = null!;
     private CheckButton _noveltyPortfolioEnabled = null!;
     private CheckButton _earlyTurnExplorationEnabled = null!;
+    private Label _parallelismLabel = null!;
+    private OptionButton _parallelismInput = null!;
     private CheckButton _noGcRegionEnabled = null!;
     private LineEdit _noGcRegionBudget = null!;
+    private LineEdit _multiplayerTurnDepth = null!;
+    private LineEdit _multiplayerTimeLimit = null!;
     private Label _gcStartupStatus = null!;
     private Control _advancedParameters = null!;
     private Button _advancedParametersToggle = null!;
     private bool _advancedParametersExpanded;
+
+    internal bool MultiplayerParallelismHintQuietForTesting
+        => _parallelismLabel.TooltipText == SolverText.Get(
+            "关闭时使用单线程搜索；2–16 是并行上限。提高可能加快大型搜索，也会增加 CPU、内存和帧率压力。")
+            && _parallelismInput.TooltipText == _parallelismLabel.TooltipText;
 
     internal bool ExercisePerformancePresetPersistenceForTesting()
     {
@@ -193,16 +202,41 @@ internal sealed partial class SolverSettingsPanel
         AddBasicRow(budgetGrid, SolverText.Get("前两回合深入探索（实验）"),
             _earlyTurnExplorationEnabled,
             SolverText.Get("常规搜索后，保留前两回合不同的合法路线并继续搜索完整战斗。最多使用 40 分钟，可随时取消；只采用战损和用药综合结果更好的完整胜利路线。默认关闭，下次搜索生效。"));
-        AddBasicRow(
+        _parallelismInput = CreateSearchParallelismInput();
+        _parallelismLabel = AddBasicRow(
             budgetGrid,
             SolverText.Get("搜索并行度"),
-            CreateSearchParallelismInput(),
+            _parallelismInput,
             SolverText.Get("关闭时使用单线程搜索；2–16 是并行上限，实际并发还会受可独立分支数和内存安全准入限制，因此 CPU 不一定满载。提高可能加快大型搜索，也会增加 CPU、峰值内存和帧率压力；超过物理核心数通常只有小幅收益。默认按可用逻辑处理器选择：16 个及以上用 8 线程，4–15 个用 4 线程，2–3 个用 2 线程，其余用单线程；遇到疑似并行问题时请先上传问题包，再切换为关闭。"));
+        _reloadInputs.Add(_ =>
+        {
+            string hint = SolverText.Get(SolverController.IsMultiplayerCombat
+                ? "关闭时使用单线程搜索；2–16 是并行上限。提高可能加快大型搜索，也会增加 CPU、内存和帧率压力。"
+                : "关闭时使用单线程搜索；2–16 是并行上限，实际并发还会受可独立分支数和内存安全准入限制，因此 CPU 不一定满载。提高可能加快大型搜索，也会增加 CPU、峰值内存和帧率压力；超过物理核心数通常只有小幅收益。默认按可用逻辑处理器选择：16 个及以上用 8 线程，4–15 个用 4 线程，2–3 个用 2 线程，其余用单线程；遇到疑似并行问题时请先上传问题包，再切换为关闭。");
+            _parallelismLabel.TooltipText = hint;
+            _parallelismInput.TooltipText = hint;
+        });
         _noGcRegionEnabled = CreateToggle();
         _noGcRegionEnabled.Disabled = !SearchGcPolicy.NoGcRegionSupported
             || RuntimeGcProfile.Current.IsActive;
         AddSettingsSection(content, SolverText.Get("搜索预算"),
             SolverText.Get("选择性能预设与并行度；详细参数可在下方展开。"), budgetGrid);
+        GridContainer multiplayerGrid = CreateSettingsGrid();
+        _multiplayerTurnDepth = CreateRequiredIntInput(
+            data => data.MultiplayerTurnDepth,
+            (data, value) => data with { MultiplayerTurnDepth = value },
+            1, 32);
+        AddBasicRow(multiplayerGrid, SolverText.Get("多人回合深度"), _multiplayerTurnDepth,
+            SolverText.Get("从当前回合起最多搜索多少个回合。"));
+        _multiplayerTimeLimit = CreateRequiredDoubleInput(
+            data => data.MultiplayerTimeLimitSeconds,
+            (data, value) => data with { MultiplayerTimeLimitSeconds = value },
+            0.1d, 600d);
+        AddBasicRow(multiplayerGrid, SolverText.Get("多人时间上限（秒）"), _multiplayerTimeLimit,
+            SolverText.Get("一次多人搜索的总时间上限，输出、防守与启动方案共用。"));
+        AddSettingsSection(content, SolverText.Get("多人搜索"),
+            SolverText.Get("多人独立设置，默认搜索 2 回合、最多 3 秒。只安排自己的动作，修改后下次搜索生效。"),
+            multiplayerGrid);
         GridContainer memoryGrid = CreateSettingsGrid();
         CheckButton automaticGc = CreateToggle();
         _reloadInputs.Add(data => automaticGc.ButtonPressed = data.AutoConfigureServerGc);
@@ -323,6 +357,39 @@ internal sealed partial class SolverSettingsPanel
         _advancedParameters = advanced;
         content.AddChild(_advancedParameters);
         return CreatePageScroll(content);
+    }
+
+    internal bool MultiplayerControlsConfiguredForTesting
+        => _performancePage.IsAncestorOf(_multiplayerTurnDepth)
+           && _performancePage.IsAncestorOf(_multiplayerTimeLimit)
+           && _multiplayerTurnDepth.Text == SolverSettings.Current.MultiplayerTurnDepth.ToString(CultureInfo.InvariantCulture)
+           && _multiplayerTimeLimit.Text == SolverSettings.FormatSeconds(
+               SolverSettings.Current.MultiplayerTimeLimitSeconds);
+
+    internal void ScrollMultiplayerControlsIntoViewForTesting()
+        => ((ScrollContainer)_performancePage).EnsureControlVisible(_multiplayerTimeLimit);
+
+    internal bool ExerciseMultiplayerInputsForTesting()
+    {
+        SolverSettingsData original = SolverSettings.Current;
+        try
+        {
+            _multiplayerTurnDepth.Text = "3";
+            _multiplayerTurnDepth.EmitSignal(LineEdit.SignalName.TextSubmitted, "3");
+            _multiplayerTimeLimit.Text = "4.5";
+            _multiplayerTimeLimit.EmitSignal(LineEdit.SignalName.TextSubmitted, "4.5");
+            if (SolverSettings.Current.MultiplayerTurnDepth != 3
+                || SolverSettings.Current.MultiplayerTimeLimitSeconds != 4.5d)
+                return false;
+            SolverSettings.Load();
+            return SolverSettings.Current.MultiplayerTurnDepth == 3
+                && SolverSettings.Current.MultiplayerTimeLimitSeconds == 4.5d;
+        }
+        finally
+        {
+            SolverSettings.Update(original);
+            Reload();
+        }
     }
 
     internal bool NoGcControlsConfiguredForTesting

@@ -8,6 +8,8 @@
 
 后台只读取根与分支状态；真实战斗对象只用作稳定身份或只读模型元数据。未知语义形成明确边界或失败。
 
+本地多人版本沿用同一引擎和所有权边界。根和 Fork 覆盖全玩家，`CombatBeamSolver.MultiplayerSupport` 管理本地动作的多人方案与余费支援；`CurrentTurnPlayers` 保存实际参与者。回合末逐参与者查询统一额外回合镜像，队友独占额外回合的被动流程结束后才返回本地候选枚举。Runtime 以原版 `IsPartOfPlayerTurn` 限制搜索和执行，不从残留 Phase 推断行动资格。使用和验证见[多人支持](multiplayer.md)。
+
 ## 2. Runtime
 
 | 入口 | 所有权 |

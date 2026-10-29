@@ -1676,6 +1676,44 @@ internal sealed partial class CombatBeamSolver
         AppendPile(ref key, playerState.DiscardPile, 'C');
         AppendPile(ref key, playerState.ExhaustPile, 'X');
         AppendOrbs(ref key, simulator, playerState.OrbQueue);
+        if (simulatedCombat.Players.Count > 1)
+        {
+            key.Add(simulatedCombat.Players.Count);
+            key.Add(_player.NetId);
+            key.Add(simulatedCombat.RoundNumber);
+            key.Add((int)simulatedCombat.CurrentSide);
+            foreach (Player member in simulatedCombat.Players.OrderBy(candidate => candidate.NetId))
+            {
+                SimCreatureState creature = simulator.State.GetCreature(member.Creature);
+                SimPlayerCombatState memberState = simulator.State.GetPlayerCombatState(member);
+                key.Add(member.NetId);
+                key.Add(simulatedCombat.GetPlayerTurnNumber(member));
+                key.Add(simulatedCombat.IsCurrentTurnParticipant(member));
+                key.Add(creature.CurrentHp);
+                key.Add(creature.MaxHp);
+                key.Add(creature.Block);
+                key.Add(memberState.Energy);
+                key.Add((int)memberState.Phase);
+                key.Add(memberState.Stars);
+                key.Add(simulatedCombat.GetPlayerGold(member));
+                if (simulatedCombat.GetOsty(member) is { } memberOsty)
+                {
+                    key.Add(memberOsty.CombatId ?? uint.MaxValue);
+                    key.Add(simulator.State.GetCreature(memberOsty).CurrentHp);
+                    key.Add(simulatedCombat.GetOstyMaxHp(simulator, member));
+                    key.Add(simulatedCombat.IsOstyHittable(simulator, member));
+                }
+                else
+                {
+                    key.Add(uint.MaxValue);
+                }
+                AppendPile(ref key, memberState.Hand, 'H');
+                AppendPile(ref key, memberState.DrawPile, 'D');
+                AppendPile(ref key, memberState.DiscardPile, 'C');
+                AppendPile(ref key, memberState.ExhaustPile, 'X');
+                AppendOrbs(ref key, simulator, memberState.OrbQueue);
+            }
+        }
         _run.Performance.End(SearchMetricPhase.PileFingerprint, pileFingerprintMeasurement);
         AppendRngState(ref key, simulator.Rng.ShuffleState);
         AppendRngState(ref key, simulator.Rng.CombatCardGenerationState);
@@ -1702,6 +1740,19 @@ internal sealed partial class CombatBeamSolver
         simulatedCombat.AppendFingerprint(ref key, simulator);
         _run.Performance.End(SearchMetricPhase.CombatFingerprint, combatFingerprintMeasurement);
         return ApplyStateKeySalt(key.Finish());
+    }
+
+    internal StateFingerprint CaptureStateKeyForTesting(CombatPredictionSimulator simulator)
+    {
+        SimulatedCombatState combat = (SimulatedCombatState)simulator.State.CombatState;
+        return BuildStateKey(
+            combat.GetPlayerTurnNumber(_player),
+            simulator.State.GetCreature(_player.Creature),
+            simulator.State.GetPlayerCombatState(_player),
+            combat,
+            simulator,
+            shufflesCrossed: 0,
+            processedEnemyDeaths: new HashSet<uint>());
     }
 
     /// <summary>
@@ -1774,6 +1825,7 @@ internal sealed partial class CombatBeamSolver
         CardModel preview = card.Preview;
         StateFingerprintBuilder key = new();
         key.Add(preview.Id.Entry);
+        key.Add(preview.Owner.NetId);
         key.Add(preview.CurrentUpgradeLevel);
         key.Add(preview.EnergyCost.CostsX);
         key.Add(preview.EnergyCost.GetWithModifiers(CostModifiers.Local));
@@ -1811,6 +1863,9 @@ internal sealed partial class CombatBeamSolver
                 break;
             case TheScythe scythe:
                 key.Add(scythe.IncreasedDamage);
+                break;
+            case TheBall ball:
+                key.Add(ball._extraDamageFromPlays);
                 break;
         }
         if (card.HasExternallyMutableAttachedModels)

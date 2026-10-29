@@ -223,6 +223,7 @@ internal sealed partial class UnattendedTestRunner
                     harness.AddChild(settings);
                     settings.Reload();
                     if (!settings.SettingsTabsConfiguredForTesting || !settings.UploadProgressConfiguredForTesting
+                        || !settings.MultiplayerControlsConfiguredForTesting
                         || !settings.PotionRewardPredictionConfiguredForTesting
                         || !settings.ExerciseSettingsTabSwitchingForTesting())
                         throw new InvalidOperationException($"Settings localization failed: {target}");
@@ -231,7 +232,12 @@ internal sealed partial class UnattendedTestRunner
                     if (!dialog.ExerciseResponsiveBoundsForTesting())
                         throw new InvalidOperationException($"Upload dialog bounds failed: {target}");
                     if (english)
+                    {
                         AssertEnglishControls(harness);
+                        if (!settings.ExerciseMultiplayerInputsForTesting())
+                            throw new InvalidOperationException("Multiplayer depth/time UI edits were not persisted.");
+                        _completedChecks.Add("MultiplayerSettings:EditedDepthAndTime:Persisted:Restored");
+                    }
                     if (!settings.ExerciseUploadCompletionTransitionForTesting())
                         throw new InvalidOperationException($"Upload transitions failed: {target}");
                 }

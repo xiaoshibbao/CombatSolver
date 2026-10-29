@@ -29,6 +29,8 @@ description: 重构 CombatSolver 的 Search、Runtime 会话、UI snapshot、无
 
 ## 2. 当前结构约束
 
+- 本地多人支持复用现有 Runtime/Search/Engine 分层。Runtime 按原版参与资格授权本地动作，Search 的 `AdvanceRound` 只在本地重新参与后返回候选枚举，`CurrentTurnPlayers` 与全玩家状态共同属于分支；不能把队友独占额外回合退化成本地回合。多人 Host 建局和 Contracts/Combat 差分继续使用现有 partial 类型，ENet 与无求解器对端工具归 tools/testing。
+
 - 预战 worker 身份由 `Entry.IsPreCombatWorker` 在启动时冻结；Dispatcher 保留完成邮箱和无人协议，仅跳过玩家战斗 UI 监控。API 可用性与启动期 Mod 钉住共用该身份，避免嵌套 worker。
 
 - 遗物策略的可控范围由 RelicCounterCatalog 声明，Runtime 冻结本场目标，Search 只读已有分支计数并输出标量评价；UI 独占输入与游戏名称。不要新建第二套可变战斗计数，也不要在 worker 读取设置或原生显示动画计数。

@@ -35,23 +35,30 @@ internal static class PlayerTurnEndLifecycle
         Player player,
         IReadOnlyList<Creature> participants)
     {
-        simulator.State.GetPlayerCombatState(player).Phase = PlayerTurnPhase.End;
+        foreach (Creature participant in participants)
+            if (participant.Player is { } endingPlayer)
+                simulator.State.GetPlayerCombatState(endingPlayer).Phase = PlayerTurnPhase.End;
         EndTurnPowerSupport.TriggerVeryEarly(combat, participants);
         if (combat.HasPendingChoice)
             return false;
         TurnStartRelicSupport.TriggerBeforeSideTurnEnd(simulator, combat, participants);
         if (combat.HasPendingChoice)
             return false;
-        if (!simulator.SimulateEndPlayerTurnBeforeOrbPassives(combat.GetPlayerTurnNumber(player)))
+        if (!simulator.SimulateEndPlayerTurnBeforeOrbPassives(
+                combat.GetPlayerTurnNumber(player), combat.CurrentTurnPlayers))
             return false;
         if (simulator.IsOverOrEnding)
             return true;
-        if (!OrbLifecycleSupport.TriggerBeforeTurnEnd(simulator, combat, player)
-            || combat.HasPendingChoice
-            || !simulator.SimulateEndPlayerTurnAfterOrbPassives(combat.GetPlayerTurnNumber(player)))
+        foreach (Creature participant in participants)
         {
-            return false;
+            if (participant.Player is { } endingPlayer
+                && (!OrbLifecycleSupport.TriggerBeforeTurnEnd(simulator, combat, endingPlayer)
+                    || combat.HasPendingChoice))
+                return false;
         }
+        if (!simulator.SimulateEndPlayerTurnAfterOrbPassives(
+                combat.GetPlayerTurnNumber(player), combat.CurrentTurnPlayers))
+            return false;
         CorePowerSupport.CompletePlayerEarlySideTurnEndEffects(combat, participants);
         return !combat.HasPendingChoice;
     }

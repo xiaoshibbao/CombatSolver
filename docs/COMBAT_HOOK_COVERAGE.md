@@ -1,19 +1,19 @@
 # CombatSolver 战斗钩子覆盖目录
 
-生成来源：CombatSolver `0.49.3`，游戏 `0.111.0`，模拟核心 `embedded`。本文件由 `tools/inspection/CoverageCatalog` 生成，不手工编辑。
+生成来源：CombatSolver `0.50.2`，游戏 `0.111.0`，模拟核心 `embedded`。本文件由 `tools/inspection/CoverageCatalog` 生成，不手工编辑。
 
 ## 汇总
 
 | 分类 | 条目 | 未分析 | 待实现 | 引擎精确 | 引擎推断 | 引擎不支持 |
 |---|---:|---:|---:|---:|---:|---:|
 | Affliction | 3 | 0 | 0 | 0 | 0 | 1 |
-| Card | 1186 | 0 | 0 | 219 | 152 | 226 |
+| Card | 1186 | 0 | 0 | 247 | 146 | 204 |
 | Enchantment | 42 | 0 | 0 | 11 | 0 | 0 |
 | MonsterMove | 339 | 0 | 0 | 0 | 0 | 0 |
 | Monster | 352 | 0 | 0 | 15 | 0 | 0 |
 | Orb | 18 | 0 | 0 | 14 | 0 | 3 |
 | Potion | 67 | 0 | 0 | 17 | 0 | 50 |
-| Power | 520 | 0 | 0 | 191 | 0 | 60 |
+| Power | 520 | 0 | 0 | 192 | 0 | 59 |
 | Relic | 508 | 0 | 0 | 123 | 0 | 9 |
 
 ## 有效支持状态

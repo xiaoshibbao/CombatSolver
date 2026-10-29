@@ -4,7 +4,7 @@
 
 ## 1. 项目边界
 
-CombatSolver 是《杀戮尖塔 2》的单人战斗路线求解器 Mod，使用 C# / .NET 9 / Godot。主线提供整场搜索，在主线程捕获稳定根、后台分叉影子状态，最后通过原版公开入口部署当前回合动作。多人研究保留在 [归档入口](docs/archive/multiplayer/README.md)。
+CombatSolver 使用 C# / .NET 9 / Godot。在主线程捕获稳定根、后台分叉影子状态，最后通过原版公开入口部署当前回合动作。本地多人版本按用户要求恢复多人支持：单人提供整场搜索，2～4 人使用本地动作的有限回合条件预测。当前行为见[多人支持](docs/multiplayer.md)，上游历史仍保留在[归档入口](docs/archive/multiplayer/README.md)。
 
 在线监控后台与部署文档由独立私有仓库 `combatsolver-presence-service` 维护；本仓库保留模组端上报、战绩采集、更新提醒及相关开发工具和客户端指南。
 

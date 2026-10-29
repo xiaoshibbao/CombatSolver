@@ -2,9 +2,11 @@ using System.Runtime.CompilerServices;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
+using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Powers;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Cards;
 using MegaCrit.Sts2.Core.Models.Events;
 using MegaCrit.Sts2.Core.Models.Potions;
 using MegaCrit.Sts2.Core.Models.Powers;
@@ -985,7 +987,8 @@ internal sealed partial class CombatBeamSolver
         PredictedCard card,
         CombatPredictionSimulator simulator)
     {
-        if (simulator.GetTargetType(card) == TargetType.AnyEnemy)
+        TargetType targetType = simulator.GetTargetType(card);
+        if (targetType == TargetType.AnyEnemy)
         {
             IReadOnlyList<Creature> enemies = simulator.State.Enemies;
             for (int i = 0; i < enemies.Count; i++)
@@ -997,7 +1000,56 @@ internal sealed partial class CombatBeamSolver
             yield break;
         }
 
+        if (targetType is TargetType.AnyAlly or TargetType.AnyPlayer)
+        {
+            IReadOnlyList<Player> players = ((SimulatedCombatState)simulator.State.CombatState).Players;
+            Creature[] eligible = players.Select(member => member.Creature)
+                // NTargetManager excludes the card owner for manual AnyAlly selection.
+                .Where(target => simulator.State.GetCreature(target).IsAlive
+                    && (targetType != TargetType.AnyAlly || target.Player != card.Original.Owner)
+                    && card.Original.IsValidTarget(target))
+                .ToArray();
+            if (eligible.Length == 0)
+                yield break;
+            uint selectedId = _allyTargetByCard.GetOrAdd(card.Original, _ =>
+            {
+                Creature selected = policy.MultiplayerAllyTargetSeatForTesting is { } seat
+                    ? players[seat].Creature
+                    : eligible[Random.Shared.Next(eligible.Length)];
+                if (!eligible.Contains(selected))
+                    throw new InvalidOperationException("Fixed ally target is not legal in this branch.");
+                return selected.CombatId
+                    ?? throw new InvalidOperationException("Ally target has no combat identity.");
+            });
+            for (int index = 0; index < players.Count; index++)
+            {
+                Creature target = players[index].Creature;
+                if (target.CombatId == selectedId
+                    && simulator.State.GetCreature(target).IsAlive)
+                    yield return (index, target);
+            }
+            yield break;
+        }
+
         yield return (-1, null);
+    }
+
+    internal uint[] AllyTargetsForTesting(PredictedCard card, CombatPredictionSimulator simulator)
+        => TargetsFor(card, simulator)
+            .Select(candidate => candidate.Target?.CombatId
+                ?? throw new InvalidOperationException("Ally target candidate has no identity."))
+            .ToArray();
+
+    private bool IsPureTeammateSupport(PredictedCard card, Creature? target)
+    {
+        if (root.PlayerCount == 1)
+            return false;
+        if (card.Preview is BeaconOfHope or HammerTime)
+            return true;
+        return target?.Player != null
+            && target.Player != _player
+            && card.Preview is (BelieveInYou or Lift or Blaze or Coordinate or Fade
+                or Constellation or Ignition or Largesse or Concoct or Soulbound or Tutor);
     }
 
     private IEnumerable<(int Index, Creature? Target)> TargetsForPotion(
@@ -1026,6 +1078,13 @@ internal sealed partial class CombatBeamSolver
         if (potion.TargetType is TargetType.AllEnemies or TargetType.TargetedNoCreature)
             yield return (-1, null);
     }
+
+    internal (int Index, uint? TargetCombatId)[] PotionTargetsForTesting(
+        PotionModel potion,
+        CombatPredictionSimulator simulator)
+        => TargetsForPotion(potion, simulator)
+            .Select(candidate => (candidate.Index, candidate.Target?.CombatId))
+            .ToArray();
 
     private static IReadOnlyList<PlanCardChoice>? ActionChoicesForReplay(PlanAction action)
     {

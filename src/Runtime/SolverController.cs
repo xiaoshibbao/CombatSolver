@@ -14,6 +14,7 @@ using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Saves;
 using MegaCrit.Sts2.Core.Settings;
+using CombatSolver.Engine.InCombat.Extensions;
 
 namespace CombatSolver;
 
@@ -111,25 +112,58 @@ internal static partial class SolverController
             CombatState? state = CombatManager.Instance.DebugOnlyGetState();
             if (state == null || !CombatManager.Instance.IsInProgress)
                 return false;
-            return _combat.LatestResult != null
-                    && _combat.LatestStamp == LiveCombatStamp.Capture(state)
+            return _combat.LatestResult is { } result
+                    && (_combat.LatestStamp == LiveCombatStamp.Capture(state)
+                        || state.Players.Count > 1
+                        && result.MultiplayerStyle != null
+                        && IsSamePlayableTurn(state, result.StartTurnNumber))
                 || !_combat.RouteFrozen && PlayerTurnSetupCoordinator.CanTakeOverTurnSetup(state);
         }
     }
 
+    public static bool MultiplayerPredictionNeedsReview
+    {
+        get
+        {
+            CombatState? state = CombatManager.Instance.DebugOnlyGetState();
+            return state != null && CombatManager.Instance.IsInProgress
+                && _combat.LatestResult is { MultiplayerStyle: not null } result
+                && IsSamePlayableTurn(state, result.StartTurnNumber)
+                && _combat.LatestStamp != LiveCombatStamp.Capture(state);
+        }
+    }
+
+
+    internal static bool MultiplayerRngNeedsReview
+    {
+        get
+        {
+            CombatState? state = CombatManager.Instance.DebugOnlyGetState();
+            return state != null && CombatManager.Instance.IsInProgress
+                && _combat.LatestResult is { MultiplayerStyle: not null } result
+                && IsSamePlayableTurn(state, result.StartTurnNumber)
+                && _combat.LatestRngStateText != null
+                && ContinuationStamp.CaptureLive(state).RngStateText != _combat.LatestRngStateText;
+        }
+    }
+
     /// <summary>
-    /// True whenever the current run is a networked multiplayer session (host or client).
-    /// The solver must stay fully inert in this case: the game's own multiplayer turn
-    /// synchronization has no concept of a client silently auto-planning another player's turn.
+    /// True when the current run uses the game's network multiplayer service.
+    /// Multiplayer planning and deployment act only for the local player.
     /// </summary>
     public static bool IsMultiplayerSession
         => RunManager.Instance.IsInProgress && RunManager.Instance.NetService.Type.IsMultiplayer();
+
+    internal static bool IsMultiplayerCombat
+        => CombatManager.Instance.IsInProgress
+            && CombatManager.Instance.DebugOnlyGetState()?.Players.Count > 1;
 
     public static bool FullAutoEnabled => _combat.FullAutoEnabled;
     public static bool RouteFrozen => _combat.RouteFrozen;
     public static bool HasRetainedRoute => _combat.LatestResult != null || _combat.ContinuationSource != null;
     public static bool AutomaticSearchPaused => _combat.AutomaticSearchPaused;
-    public static bool AutomaticCalculationEnabled => SolverSettings.Current.AutomaticCalculationEnabled;
+    public static bool AutomaticCalculationEnabled
+        => IsMultiplayerCombat || SolverSettings.Current.AutomaticCalculationEnabled;
     internal static bool ShouldAutomaticallySearchNextTurn
         => FullAutoEnabled || AutomaticCalculationEnabled && !_combat.RouteFrozen;
 
@@ -181,6 +215,19 @@ internal static partial class SolverController
             : "solver_only";
     internal static int? LastSolverDeployedTurnForBugReport => _combat.LastSolverDeployedTurn;
     internal static SolverResult? LastCompletedResultForTesting { get; private set; }
+    internal static IReadOnlyList<SolverMultiplayerOptionSnapshot> MultiplayerOptionsForUi
+        => _combat.LatestResult?.MultiplayerStyle == null ? []
+            : _combat.MultiplayerOptions.Select(option => new SolverMultiplayerOptionSnapshot(
+                option.MultiplayerStyle ?? throw new InvalidOperationException("Multiplayer option has no style."),
+                option.EnemyHpLostByTurn[option.StartTurnNumber],
+                option.HpRecoveredByTurn[option.StartTurnNumber]
+                    - option.HpLostByTurn[option.StartTurnNumber],
+                option.MultiplayerCurrentTurnProjectedHp,
+                option.EnergyLeftByTurn[option.StartTurnNumber],
+                option.MultiplayerSetupValue,
+                ReferenceEquals(option, _combat.LatestResult))).ToArray();
+    internal static MultiplayerPlanStyle? SelectedMultiplayerStyleForUi
+        => _combat.LatestResult?.MultiplayerStyle;
     internal static bool HasActiveSearchSessionForTesting => _search != null;
     internal static SolverResult? LastTurnSetupResultForTesting { get; private set; }
     internal static Exception? LastSearchFailureForTesting { get; private set; }
@@ -195,7 +242,7 @@ internal static partial class SolverController
     internal static bool ManualRouteImprovementDetected
         => _combat.ManualRouteImprovementDetected;
     internal static bool AllowsPlayerUploadGuidance
-        => _combat.UploadPolicy.AllowsPlayerUploadGuidance;
+        => !IsMultiplayerCombat && _combat.UploadPolicy.AllowsPlayerUploadGuidance;
     internal static bool BugReportUploadRecommended
         => AllowsPlayerUploadGuidance && (UnexpectedReplanCount > 0
            || _combat.ReplanCounts.GetValueOrDefault(ReplanCause.ContinuationMissing) > 0
@@ -521,6 +568,8 @@ internal static partial class SolverController
                 $"实际为 {maxDegreeOfParallelism}。");
         }
         SolverSearchProfile profile = UnattendedTestRunner.CheckpointProfileOverride ?? settings.Profile;
+        if (state.Players.Count > 1)
+            profile = profile with { SoftTimeBudgetMilliseconds = settings.MultiplayerTimeLimitMilliseconds };
         SearchPolicySnapshot policy = new(
             UnattendedTestRunner.BeamWeightPerturbationOverride is { } beamWeightPerturbation
                 ? profile with { BeamWeightPerturbation = beamWeightPerturbation }
@@ -532,7 +581,8 @@ internal static partial class SolverController
             UnattendedTestRunner.FixedSearchBudget,
             UnattendedTestRunner.MeasureSearchPhases,
             maxDegreeOfParallelism,
-            UnattendedTestRunner.SearchBudgetOverrideMilliseconds,
+            UnattendedTestRunner.SearchBudgetOverrideMilliseconds
+                ?? (state.Players.Count > 1 ? settings.MultiplayerTimeLimitMilliseconds : null),
             includeTurnSetup,
             theftPolicy,
             settings.ActTransitionBossHpStrategy,
@@ -558,6 +608,7 @@ internal static partial class SolverController
             UseBeamWidthPortfolio = settings.UseBeamWidthPortfolio
                 || UnattendedTestRunner.UseBeamWidthPortfolioOverride,
             PredictPotionReward = settings.PredictPotionReward,
+            MaxTurnLayers = state.Players.Count > 1 ? settings.MultiplayerTurnDepth : int.MaxValue,
             BeamWidthPortfolioWidths = UnattendedTestRunner.BeamWidthPortfolioWidthsOverride,
             BeamWidthPortfolioPlainBaselineMember =
                 UnattendedTestRunner.BeamWidthPortfolioPlainBaselineMemberOverride,
@@ -1242,7 +1293,9 @@ internal static partial class SolverController
             search.PotionRewardOutlook = rootSnapshot.PotionRewardOutlook;
             _combat.State = state;
             _combat.LatestResult = null;
+            _combat.MultiplayerOptions = [];
             _combat.LatestStamp = null;
+            _combat.LatestRngStateText = null;
             LastCompletedResultForTesting = null;
             LastSearchFailureForTesting = null;
             LastFullAutoStoppedForWorseRecalculationForTesting = false;
@@ -1413,6 +1466,28 @@ internal static partial class SolverController
     private static string EscapeRichText(string value)
         => value.Replace('[', '［').Replace(']', '］');
 
+    internal static bool SelectMultiplayerStyle(NGame host, CombatState state, MultiplayerPlanStyle style)
+    {
+        AssertMainThread();
+        if (IsSearching || IsDeploying || !ReferenceEquals(_combat.State, state)
+            || _combat.LatestResult?.MultiplayerStyle == null
+            || _combat.LatestStamp != LiveCombatStamp.Capture(state)
+            || !CanSolve(state, out _))
+            return false;
+        SolverResult selected = _combat.MultiplayerOptions.Single(option => option.MultiplayerStyle == style);
+        if (ReferenceEquals(_combat.LatestResult, selected))
+            return true;
+        _combat.LatestResult = selected;
+        _combat.ContinuationSource = selected;
+        if (UnattendedTestRunner.IsActive)
+            LastCompletedResultForTesting = selected;
+        BattleDamageTracker.RegisterPlan(state, selected);
+        SolverOverlay.ShowResult(host, SolverOverlaySnapshot.CaptureWithReviewedWorldlines(
+            selected, UnexpectedReplanCount > 0, _combat.ReviewedWorldlinesTotal));
+        Entry.Logger.Info($"[CombatSolver/Test] MULTIPLAYER_STYLE_SELECTED style={style}");
+        return true;
+    }
+
     public static void RequestDeploy(NGame host, CombatState state)
     {
         AssertMainThread();
@@ -1459,6 +1534,43 @@ internal static partial class SolverController
             StartDeployment(host, state, _combat.LatestResult);
             return;
         }
+        if (state.Players.Count > 1 && _combat.LatestResult is { MultiplayerStyle: not null } previous)
+        {
+            bool rngChanged = MultiplayerRngNeedsReview;
+            if (RunManager.Instance.ActionExecutor.IsRunning || !RunManager.Instance.ActionQueueSet.IsEmpty)
+            {
+                SolverOverlay.Show(host, SolverText.Get("等待当前原生动作结算后再执行。"));
+                return;
+            }
+            SolverCurrentTurnPreview? revised = ReevaluateMultiplayerCurrentTurn(state, previous, current);
+            if (revised == null)
+            {
+                SolverOverlay.Show(host, SolverText.Get("原路线在当前状态已失效，未执行。请重新计算。"));
+                Entry.Logger.Warn("[CombatSolver/Test] MULTIPLAYER_ROUTE_INVALID reason=action_not_legal");
+                return;
+            }
+            _combat.LatestStamp = current;
+            _combat.LatestRngStateText = ContinuationStamp.CaptureLive(state).RngStateText;
+            _combat.MultiplayerOptions = [];
+            _combat.ContinuationSource = null;
+            SolverOverlaySnapshot preview = SolverOverlaySnapshot.CaptureCurrentTurn(revised) with
+            {
+                StatusText = SolverText.Get("原路线已在当前状态重评估"),
+                SummaryText = SolverText.Format(
+                    $"当前回合预计扣血 {revised.HpLost} HP；假设队友后续不主动出牌。"),
+            };
+            SolverOverlay.ShowResult(host, preview);
+            if (rngChanged)
+            {
+                SolverOverlay.ShowMultiplayerRngDeviation();
+                SolverOverlay.ShowMultiplayerRngReevaluated();
+            }
+            Entry.Logger.Info($"[CombatSolver/Test] MULTIPLAYER_ROUTE_REEVALUATED turn={revised.Turn} " +
+                $"hp_lost={revised.HpLost} enemy_hp_lost={revised.EnemyHpLost} " +
+                $"actions={revised.Actions.Count}");
+            StartDeployment(host, state, previous);
+            return;
+        }
 
         if (_search is { } search
             && ReferenceEquals(search.State, state)
@@ -1480,6 +1592,21 @@ internal static partial class SolverController
             MarkManualControlObserved("deploy_after_live_state_change");
 
         RequestSearch(host, state, SearchReason.Deploy, deployWhenReady: true);
+    }
+
+    private static SolverCurrentTurnPreview? ReevaluateMultiplayerCurrentTurn(
+        CombatState state,
+        SolverResult result,
+        LiveCombatStamp stamp)
+    {
+        CombatRootSnapshot root = CombatRootSnapshot.Capture(state);
+        if (root.LiveStamp != stamp)
+            throw new InvalidOperationException("Multiplayer route root changed during capture.");
+        SearchPolicySnapshot policy = CaptureSearchPolicy(
+            SolverSettings.Capture(), state, includeTurnSetup: false, theftPolicy: null);
+        CombatBeamSolver replay = new(root, SolverDisplayNames.Capture(state),
+            BattleDamageTracker.Observe(state), policy);
+        return replay.ReevaluateMultiplayerCurrentTurn(result);
     }
 
     public static void SetFullAuto(NGame host, CombatState state, bool enabled)
@@ -2285,7 +2412,7 @@ internal static partial class SolverController
         if (SolverOverlay.InitializationPending && !IsSearching && !IsDeploying
             && !PendingCombatDeferredOperations.Any(task => !task.IsCompleted)
             && !PlayerTurnSetupCoordinator.IsManaging(current)
-            && current.Players.Count == 1
+            && current.Players.Count is >= 1 and <= 4
             && LocalContext.GetMe(current)?.PlayerCombatState?.Phase == PlayerTurnPhase.Play
             && NGame.Instance is { } host)
         {
@@ -2559,9 +2686,64 @@ internal static partial class SolverController
         CombatState searchedState = search.State;
         LiveCombatStamp searchedStamp = search.Stamp;
         CombatState? currentState = CombatManager.Instance.DebugOnlyGetState();
+        LiveCombatStamp? currentStamp = ReferenceEquals(currentState, searchedState)
+            ? LiveCombatStamp.Capture(searchedState) : null;
+        if (ReferenceEquals(currentState, searchedState)
+            && searchedState.Players.Count > 1
+            && currentStamp is { } changedStamp && changedStamp != searchedStamp
+            && CanSolve(searchedState, out _)
+            && task.Result is { MultiplayerStyle: not null } changedResult
+            && IsSamePlayableTurn(searchedState, changedResult.StartTurnNumber))
+        {
+            _combat.PendingCompleteProjectionBaseline = null;
+            _combat.PendingManualProjectionBaseline = null;
+            SolverCurrentTurnPreview? revised = ReevaluateMultiplayerCurrentTurn(
+                searchedState, changedResult, changedStamp);
+            if (revised == null)
+            {
+                _combat.FullAutoEnabled = false;
+                _combat.AutomaticSearchPaused = true;
+                _combat.AutomaticSearchPausedTurn = changedResult.StartTurnNumber;
+                _combat.LatestResult = null;
+                _combat.LatestStamp = null;
+                _combat.ContinuationSource = null;
+                _combat.MultiplayerOptions = [];
+                SolverOverlay.Show(host, SolverText.Get("原路线在当前状态已失效，未执行。请重新计算。"));
+                SearchCompletionNotifier.Notify(SearchCompletionNotificationKind.Stale);
+                Entry.Logger.Warn($"[CombatSolver/Test] SEARCH_MULTIPLAYER_INVALID generation={generation} reason=changed_during_search");
+                return;
+            }
+            _combat.LatestResult = changedResult;
+            _combat.LatestStamp = changedStamp;
+            _combat.LatestRngStateText = ContinuationStamp.CaptureLive(searchedState).RngStateText;
+            _combat.ContinuationSource = null;
+            _combat.MultiplayerOptions = [];
+            if (UnattendedTestRunner.IsActive)
+                LastCompletedResultForTesting = changedResult;
+            SolverOverlaySnapshot revisedSnapshot = SolverOverlaySnapshot.CaptureCurrentTurn(revised) with
+            {
+                StatusText = SolverText.Get("原路线已在当前状态重评估"),
+                SummaryText = SolverText.Format(
+                    $"当前回合预计扣血 {revised.HpLost} HP；假设队友后续不主动出牌。"),
+            };
+            SolverOverlay.ShowResult(host, revisedSnapshot);
+            if (new ContinuationStamp(changedResult.ComparisonRootState
+                    ?? throw new InvalidOperationException("Multiplayer search result has no comparison root.")).RngStateText
+                != _combat.LatestRngStateText)
+            {
+                SolverOverlay.ShowMultiplayerRngDeviation();
+                SolverOverlay.ShowMultiplayerRngReevaluated();
+            }
+            SearchCompletionNotifier.Notify(SearchCompletionNotificationKind.Succeeded);
+            Entry.Logger.Info($"[CombatSolver/Test] SEARCH_MULTIPLAYER_REEVALUATED generation={generation} " +
+                $"turn={revised.Turn} actions={revised.Actions.Count} hp_lost={revised.HpLost}");
+            if (search.DeployWhenReady || _combat.FullAutoEnabled)
+                StartDeployment(host, searchedState, changedResult);
+            return;
+        }
         if (!ReferenceEquals(currentState, searchedState)
             || !CanSolve(searchedState, out _)
-            || LiveCombatStamp.Capture(searchedState) != searchedStamp)
+            || currentStamp != searchedStamp)
         {
             RecordSearchResultStale(search);
             _combat.PendingCompleteProjectionBaseline = null;
@@ -2619,7 +2801,12 @@ internal static partial class SolverController
         }
 
         _combat.LatestResult = result;
+        _combat.MultiplayerOptions = result.MultiplayerStyle is null
+            ? [] : [result, .. result.MultiplayerAlternatives];
         _combat.LatestStamp = searchedStamp;
+        _combat.LatestRngStateText = result.MultiplayerStyle == null
+            ? null : new ContinuationStamp(result.ComparisonRootState
+                ?? throw new InvalidOperationException("Multiplayer search result has no comparison root.")).RngStateText;
         _combat.ContinuationSource = currentTurnAdopted ? null : result;
         if (UnattendedTestRunner.IsActive)
             LastCompletedResultForTesting = result;
@@ -2890,6 +3077,54 @@ internal static partial class SolverController
             .ToList();
         PlanAction? plannedEndTurn = result.BestNode.Actions
             .FirstOrDefault(action => action.Turn == turn && action.Kind == PlanActionKind.EndTurn);
+        LiveCombatStamp validatedStamp = LiveCombatStamp.Capture(state);
+        string lastObservedRng = ContinuationStamp.CaptureLive(state).RngStateText;
+        int? revisedPlannedHpLoss = null;
+        async Task<bool> ReevaluateRemainingAsync(int nextActionIndex)
+        {
+            if (state.Players.Count < 2)
+                return true;
+            await RunManager.Instance.ActionExecutor.FinishedExecutingActions();
+            token.ThrowIfCancellationRequested();
+            if (!IsSamePlayableTurn(state, turn))
+                throw new InvalidOperationException("部署途中已不再是原玩家回合。");
+            ContinuationStamp observed = ContinuationStamp.CaptureLive(state);
+            if (observed.RngStateText != lastObservedRng)
+            {
+                SolverOverlay.ShowMultiplayerRngDeviation();
+                Entry.Logger.Warn($"[CombatSolver/Test] MULTIPLAYER_RNG_DRIFT turn={turn} action_index={nextActionIndex} source=between_actions");
+                lastObservedRng = observed.RngStateText;
+            }
+            if (LiveCombatStamp.FromContinuation(observed) == validatedStamp)
+                return true;
+            CombatRootSnapshot changedRoot = CombatRootSnapshot.Capture(state);
+            SearchPolicySnapshot changedPolicy = CaptureSearchPolicy(
+                SolverSettings.Capture(), state, includeTurnSetup: false, theftPolicy: null);
+            CombatBeamSolver replay = new(changedRoot, SolverDisplayNames.Capture(state),
+                BattleDamageTracker.Observe(state), changedPolicy);
+            PlanAction[] remaining = plannedEndTurn is null
+                ? [.. actions.Skip(nextActionIndex)]
+                : [.. actions.Skip(nextActionIndex), plannedEndTurn];
+            SolverCurrentTurnPreview? revised = replay.ReevaluateMultiplayerCurrentTurn(result, remaining);
+            if (revised == null)
+            {
+                _combat.FullAutoEnabled = false;
+                _combat.AutomaticSearchPaused = true;
+                _combat.AutomaticSearchPausedTurn = turn;
+                _combat.ContinuationSource = null;
+                SolverOverlay.Show(host, SolverText.Get("原路线在当前状态已失效，未执行。请重新计算。"));
+                Entry.Logger.Warn($"[CombatSolver/Test] MULTIPLAYER_ROUTE_INVALID reason=mid_deployment action_index={nextActionIndex}");
+                return false;
+            }
+            validatedStamp = changedRoot.LiveStamp;
+            revisedPlannedHpLoss = revised.HpLost;
+            if (SolverOverlay.MultiplayerRngDeviationSeen)
+                SolverOverlay.ShowMultiplayerRngReevaluated();
+            Entry.Logger.Info($"[CombatSolver/Test] MULTIPLAYER_ROUTE_REEVALUATED turn={turn} " +
+                $"action_index={nextActionIndex} hp_lost={revised.HpLost} enemy_hp_lost={revised.EnemyHpLost} " +
+                $"actions={revised.Actions.Count}");
+            return true;
+        }
         FastModeType originalFastMode = SaveManager.Instance.PrefsSave.FastMode;
         FastModeType? overrideFastMode = ResolveDeploymentFastMode(deploymentSettings.DeploymentFastMode);
         try
@@ -2907,8 +3142,21 @@ internal static partial class SolverController
                 if (!IsSamePlayableTurn(state, turn))
                     throw new InvalidOperationException("部署途中已不再是原玩家回合。");
 
+                if (!await ReevaluateRemainingAsync(actionIndex))
+                    return;
+
                 Player player = LocalContext.GetMe(state)!;
                 Creature? target = state.GetCreature(action.TargetCombatId);
+                string? expectedRngAfterAction = null;
+                if (state.Players.Count > 1 && action.CardId != "TUTOR")
+                {
+                    CombatRootSnapshot actionRoot = CombatRootSnapshot.Capture(state);
+                    SearchPolicySnapshot actionPolicy = CaptureSearchPolicy(
+                        SolverSettings.Capture(), state, includeTurnSetup: false, theftPolicy: null);
+                    CombatBeamSolver actionReplay = new(actionRoot, SolverDisplayNames.Capture(state),
+                        BattleDamageTracker.Observe(state), actionPolicy);
+                    expectedRngAfterAction = actionReplay.PredictMultiplayerActionRng(action);
+                }
                 string actionTitle = action.Kind == PlanActionKind.UsePotion
                     ? SolverUiModelNames.Potion(action.PotionId, action.PotionTitle)
                     : SolverUiModelNames.Card(action.CardId, action.CardUpgradeLevel, action.CardTitle);
@@ -2967,6 +3215,9 @@ internal static partial class SolverController
                             deployWhenReady: !_combat.FullAutoEnabled);
                         return;
                     }
+                    if ((potion.TargetType is TargetType.AnyPlayer or TargetType.Self)
+                        && target != null && target != player.Creature)
+                        throw new InvalidOperationException("玩家目标药水的部署目标必须是本地玩家。");
                     GameAction queuedAction = await EnqueueAndCaptureActionAsync(
                         candidate => candidate is UsePotionAction usePotion
                             && ReferenceEquals(usePotion.Player, player)
@@ -2982,7 +3233,9 @@ internal static partial class SolverController
                 {
                     List<CardModel> hand = player.PlayerCombatState!.Hand.Cards.ToList();
                     CardModel card = FindCardForDeployment(hand, action);
-                    if (!card.CanPlayTargeting(target))
+                    if (!card.CanPlayTargeting(target)
+                        || card.TargetType == TargetType.AnyAlly
+                        && (target == null || !state.GetValidManualCardTargets(card).Contains(target)))
                     {
                         bool targetValid = card.IsValidTarget(target);
                         bool cardPlayable = card.CanPlay(out UnplayableReason reason, out AbstractModel? preventer);
@@ -3031,6 +3284,18 @@ internal static partial class SolverController
                     choiceSession.ReleaseVisibleSurface();
                     throw;
                 }
+                if (expectedRngAfterAction != null)
+                {
+                    await RunManager.Instance.ActionExecutor.FinishedExecutingActions();
+                    token.ThrowIfCancellationRequested();
+                    string actualRngAfterAction = ContinuationStamp.CaptureLive(state).RngStateText;
+                    if (actualRngAfterAction != expectedRngAfterAction)
+                    {
+                        SolverOverlay.ShowMultiplayerRngDeviation();
+                        Entry.Logger.Warn($"[CombatSolver/Test] MULTIPLAYER_RNG_DRIFT turn={turn} action_index={actionIndex} source=action_boundary");
+                    }
+                    lastObservedRng = actualRngAfterAction;
+                }
                 if (measureDeploymentTiming)
                 {
                     Entry.Logger.Info(
@@ -3069,8 +3334,9 @@ internal static partial class SolverController
             {
                 if (plannedEndTurn == null)
                 {
+                    bool teammateChoiceResolved = actions.LastOrDefault()?.CardId == "TUTOR";
                     Entry.Logger.Warn(
-                        $"[CombatSolver/Test] DEPLOY_REPLAN turn={turn} reason=turn_plan_exhausted " +
+                        $"[CombatSolver/Test] DEPLOY_REPLAN turn={turn} reason={(teammateChoiceResolved ? "teammate_choice_resolved" : "turn_plan_exhausted")} " +
                         $"executed_actions={actions.Count}");
                     _combat.ContinuationSource = null;
                     CompleteDeployment(deployment);
@@ -3078,9 +3344,13 @@ internal static partial class SolverController
                         host,
                         state,
                         SearchReason.PlanExhausted,
-                        deployWhenReady: !_combat.FullAutoEnabled);
+                        deployWhenReady: teammateChoiceResolved
+                            ? _combat.FullAutoEnabled
+                            : !_combat.FullAutoEnabled);
                     return;
                 }
+                if (!await ReevaluateRemainingAsync(actions.Count))
+                    return;
                 Player player = LocalContext.GetMe(state)!;
                 if (_combat.FullAutoEnabled
                     && (_stopFullAutoOnDeathTurn || _stopFullAutoOnWorseRecalculation))
@@ -3089,7 +3359,7 @@ internal static partial class SolverController
                     LiveEndTurnRiskProjection liveRisk = LiveEndTurnRiskEvaluator.Evaluate(
                         state,
                         plannedEndTurn.TurnStartChoices);
-                    int plannedHpLoss = result.RequireHpLostForTurn(turn);
+                    int plannedHpLoss = revisedPlannedHpLoss ?? result.RequireHpLostForTurn(turn);
                     bool worsened = liveRisk.HpLost > plannedHpLoss;
                     if ((_stopFullAutoOnDeathTurn && liveRisk.PlayerDead)
                         || (_stopFullAutoOnWorseRecalculation && worsened))
@@ -3683,9 +3953,10 @@ internal static partial class SolverController
             rejection = "求解器已在设置中禁用。";
         else if (!CombatManager.Instance.IsInProgress)
             rejection = "当前没有进行中的战斗。";
-        else if (state.Players.Count != 1)
-            rejection = "第一版只支持单人战斗。";
-        else if (state.CurrentSide != CombatSide.Player || player?.PlayerCombatState?.Phase != PlayerTurnPhase.Play)
+        else if (state.Players.Count is < 1 or > 4)
+            rejection = "只支持 1～4 人战斗。";
+        else if (state.CurrentSide != CombatSide.Player || player?.PlayerCombatState?.Phase != PlayerTurnPhase.Play
+            || !CombatManager.Instance.IsPartOfPlayerTurn(player))
             rejection = "当前不是玩家出牌阶段。";
         else if (CombatManager.Instance.PlayerActionsDisabled)
             rejection = "玩家操作当前被游戏禁用。";
@@ -3703,7 +3974,8 @@ internal static partial class SolverController
         return ReferenceEquals(CombatManager.Instance.DebugOnlyGetState(), state)
             && state.CurrentSide == CombatSide.Player
             && player?.PlayerCombatState?.TurnNumber == turn
-            && player.PlayerCombatState.Phase == PlayerTurnPhase.Play;
+            && player.PlayerCombatState.Phase == PlayerTurnPhase.Play
+            && CombatManager.Instance.IsPartOfPlayerTurn(player);
     }
 
     private static void AssertMainThread()

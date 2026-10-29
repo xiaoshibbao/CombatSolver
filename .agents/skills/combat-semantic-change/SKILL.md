@@ -9,6 +9,8 @@ description: 修改 CombatSolver 的卡牌、Power、遗物、药水、球、怪
 
 本 skill 处理会改变合法动作或战斗结算的语义。纯 UI、职责移动、Beam/评分调优和发布工作分别使用对应 skill。
 
+本地多人版本的回合参与者由 `CurrentTurnPlayers` 持有；额外回合逐参与者调用统一镜像，不能仅检查本地玩家。只有队友获得额外回合时，推进其被动并在本地重新参与后才枚举本地动作；Runtime 同时检查原版参与资格。相关回归为 `MULTIPLAYER-P0` 的 ENet remote-extra 模式，必须比较返回本地回合后的全玩家状态和完整 RNG。
+
 开始前读取 `docs/ARCHITECTURE.md` 的 Runtime、Search、模拟引擎与 Prediction 章节。若 actual/simulated、增量回放和续用均一致，问题才可能属于搜索质量，转用 `search-performance-optimization`。
 
 ## 1. 沿当前调用链定位

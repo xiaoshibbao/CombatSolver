@@ -1,6 +1,7 @@
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Cards;
 using CombatSolver.Engine.Common;
 using CombatSolver.Engine.InCombat.Simulation;
 
@@ -82,8 +83,6 @@ internal sealed partial class CombatBeamSolver
             }
             seenCards[seenCardCount++] = playableKey;
             string cardStateKey = CardChoiceSupport.ChoiceCardKey(card);
-            bool requiresUnsupportedExistingChoice =
-                CardChoiceSupport.RequiresUnsupportedExistingChoice(card.Preview);
             PlanCardChoice? requiredEmptyChoice =
                 CardChoiceSupport.BuildRequiredEmptyChoice(card.Preview);
             int cardStateOccurrence = 0;
@@ -99,6 +98,8 @@ internal sealed partial class CombatBeamSolver
             }
             foreach ((int targetIndex, Creature? target) in TargetsFor(card, simulator))
             {
+                if (IsPureTeammateSupport(card, target) && card.Preview is not Tutor)
+                    continue;
                 if (node.ActionCount == 0 && !card.Original.CanPlayTargeting(target))
                     continue;
                 string cardTitle;
@@ -131,7 +132,7 @@ internal sealed partial class CombatBeamSolver
                     action,
                     card.Preview.Type,
                     target?.CombatId,
-                    requiresUnsupportedExistingChoice,
+                    card.Preview is Tutor,
                     requiredEmptyChoice);
             }
         }
@@ -221,12 +222,6 @@ internal sealed partial class CombatBeamSolver
         out IEnumerable<(PlanAction Action, SimulationSnapshot Snapshot)> resolvedBranches)
     {
         CardChoiceSpec? choiceSpec = BuildPrimaryCardChoiceSpec(probeSnapshot);
-        if (choiceSpec == null && action.RequiresUnsupportedExistingChoice)
-        {
-            probeSnapshot.ReleaseSimulator();
-            resolvedBranches = [];
-            return false;
-        }
         PlanCardChoice? requiredEmptyChoice = action.RequiredEmptyChoice;
         CardChoiceSpec? primaryChoiceSpec = choiceSpec
             ?? BuildRequiredEmptyChoiceSpec(requiredEmptyChoice);

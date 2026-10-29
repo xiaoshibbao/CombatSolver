@@ -1,14 +1,14 @@
 # 战斗路线求解器 / Combat Solver
 
-Combat Solver 是一个面向《杀戮尖塔 2》单人模式的战斗路线求解器。进入战斗后，它会在后台模拟当前手牌、牌堆、敌人行动、药水、遗物、选牌和跨回合状态，并在预算范围内给出推荐路线、预计战损与关键行动。
+Combat Solver 是《杀戮尖塔 2》的战斗路线求解器。本地多人版本在 0.50.1 主线基础上集成多人引擎，支持 2～4 人房主和加入者；单人保留整场搜索。多人功能、条件预测与本轮验证范围见[多人使用与验证](docs/multiplayer.md)。
 
-玩家可以只查看建议，也可以让求解器执行当前回合，或连续接管整场战斗。搜索不会修改游戏 RNG，也不会在后台操作真实战斗状态。
+玩家可以只查看建议或执行当前回合，单人还可连续接管整场战斗。多人只操作自己的角色，每回合重新捕获状态；预测假定队友不再主动出牌，队友已有被动和回合效果仍参与模拟。搜索不会修改游戏 RNG，也不会在后台操作真实战斗状态。
 
 **参与开发：** [社区任务入口](https://github.com/Torch1230/CombatSolver/issues/171)按每批五个主题发布故障修复与路线优化任务，每主题一至两个 0.47.x 代表包。[贡献指南](CONTRIBUTING.md)说明整批认领与 PR 流程，[夹具与脚手架指南](docs/community/testing-guide.md)说明差分、包回放与策略实验入口。
 
-当前已发布版本为 **0.48.0**：包含社区修复、复杂战斗优化和原版回血剪枝。详见 [更新日志](docs/releases/0.48.0-RELEASE_NOTES.md)。
+本地版本为 **0.50.2 多人适配版**，未发布到作者的渠道。原版游戏目标为 0.111.0。
 
-**English UI:** Set the game language to English and restart the game. CombatSolver provides a recommended route; use **Play turn** for one turn or **Auto: On** for continuous play. Configure potions, growth and search budgets in the overlay. **Settings > Reports > Upload report** submits a bug report. Logs, raw errors and some detailed diagnostics retain their original text. Single-player only.
+**English UI:** Set the game language to English and restart. This local build supports 2–4 players, hosts and clients. Multiplayer plans control only your character and assume no further active teammate plays; passive effects still resolve. Select a plan to execute the current turn. Each new turn requires a fresh plan. Single-player retains full-battle search and continuous execution.
 
 界面跟随游戏语言：简体/繁体中文使用现有中文文案，其他语言使用英文。简化版不提供独立语言开关；卡牌胶囊、选牌和相关悬停说明支持运行中切换语言，其他既有窗口可通过重启统一刷新。
 

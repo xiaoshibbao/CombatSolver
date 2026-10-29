@@ -23,6 +23,8 @@ internal sealed record SearchPolicySnapshot(
     internal PrimaryIncumbentTable? PrimaryIncumbents { get; init; }
     internal bool DisableSharedPrimaryIncumbentsForTesting { get; init; }
     public bool UseNoveltyPortfolio { get; init; }
+    public int MaxTurnLayers { get; init; } = int.MaxValue;
+    internal int? MultiplayerAllyTargetSeatForTesting { get; init; }
     public int EarlyTurnExplorationDepth { get; init; }
     public int EarlyTurnExplorationBudgetMilliseconds { get; init; }
     public bool PredictPotionReward { get; init; }

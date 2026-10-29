@@ -17,6 +17,8 @@
 
 测试选择与平台命令见 [无人测试](../../docs/HEADLESS_TESTING.md)，当前最小哨兵见 [测试矩阵](../../docs/TEST_MATRIX.md)。长期测试有明确断言、最小入口或 fixture；同一机制优先扩展已有合同。
 
+多人协议与建局位于 Host 的 `MultiplayerProbe` / `ScenarioBuilder.Multiplayer`，实际差分与控制器合同位于 Contracts/Combat 的 `Executor.Multiplayer`。ENet launcher 和不加载求解器的对端工具归 tools/testing；输入、复跑命令与证据范围见[多人支持](../../docs/multiplayer.md)。
+
 `Contracts/Combat/UnattendedTestRunner.HandDrawRelicQuery.cs` 通过检查点 `RestoreOnly` 与场景名 `HAND-DRAW-RELICS-PROBE` 复用原生回放建局，逐一核对8种抽牌遗物在回合1～4及已有计数下的原生命令、冻结查询、Fork/RNG/父分支和live隔离；它只验证查询，完整生命周期沿用对应遗物合同。
 
 `Contracts/Search/UnattendedTestRunner.PotionCostIncumbent.cs` 使用 `POTION-COST-INCUMBENT` / IRONCLAD / NIBBITS_WEAK / 120秒，验证实际完整14/9成本胜利下同回合和更晚回合的等HP保路及原生EndTurn/用药完整状态。`ZeroAllowanceRelicIncumbent.cs` 使用 `ZERO-ALLOWANCE-RELIC-INCUMBENT` / 同角色遭遇及上限，验证真实完整胜利在零战损让步遗物目标下的本地及协调器后续HP界，保留同HP、正额度、成长和追回，原生HP消耗前缀严格差分。

@@ -219,6 +219,7 @@ internal sealed partial class SimulatedCombatState
     private ForkableDictionary<Creature, int>? _blockCardsPlayedThisTurn;
     private ForkableDictionary<Creature, int>? _skillCardsPlayedThisTurn;
     private ForkableDictionary<Creature, int>? _cardsExhaustedThisTurn;
+    private int _cardsExhaustedAfterRoot;
     private ForkableSet<Creature>? _doomAppliersThisTurn;
     private ForkableSet<Creature>? _unblockedDamageThisTurn;
     private ForkableDictionary<Creature, int>? _cumulativeHpLost;
@@ -244,6 +245,7 @@ internal sealed partial class SimulatedCombatState
     private uint _nextCreatureId;
     private int _roundNumber;
     private CombatSide _currentSide;
+    private Player[] _currentTurnPlayers;
     private bool _battlewornDummyTimedOut;
     private bool _rootMaterialized;
     private CombatPredictionState? _predictionState;
@@ -434,6 +436,8 @@ internal sealed partial class SimulatedCombatState
         _nextCreatureId = (uint)NextCreatureIdField.GetValue(inner)!;
         _roundNumber = inner.RoundNumber;
         _currentSide = inner.CurrentSide;
+        IReadOnlyList<Player> extraTurnPlayers = CombatManager.Instance.PlayersTakingExtraTurn;
+        _currentTurnPlayers = (extraTurnPlayers.Count > 0 ? extraTurnPlayers : _players).ToArray();
         _deathPhases = BuildInitialDeathPhases(inner.Enemies);
         _playerTurnNumbers = [];
         _simulatedPlayerGold = [];
@@ -487,6 +491,7 @@ internal sealed partial class SimulatedCombatState
         _playerNames = source._playerNames;
         _rootFloatingCards = source._rootFloatingCards;
         _rootDeadCreatures = source._rootDeadCreatures;
+        _currentTurnPlayers = source._currentTurnPlayers;
         _allies = allies;
         _enemies = enemies;
         _knownEnemies = knownEnemies;
@@ -555,6 +560,14 @@ internal sealed partial class SimulatedCombatState
     public IReadOnlyList<Creature> Creatures => _creatures ??= new CombinedRosterView(_allies, _enemies);
     public IReadOnlyList<Creature> PlayerCreatures => _playerCreatures;
     public IReadOnlyList<Player> Players => _players;
+    public IReadOnlyList<Player> CurrentTurnPlayers => _currentTurnPlayers;
+    public bool IsCurrentTurnParticipant(Player player) => _currentTurnPlayers.Contains(player);
+    public void SetCurrentTurnPlayers(IReadOnlyList<Player> players)
+    {
+        if (players.Count == 0)
+            throw new InvalidOperationException("A player turn must have at least one participant.");
+        _currentTurnPlayers = players.ToArray();
+    }
     public IReadOnlyList<ModifierModel> Modifiers => _modifiers;
     public MultiplayerScalingModel? MultiplayerScalingModel => _multiplayerScalingModel;
     public int RoundNumber
@@ -648,6 +661,26 @@ internal sealed partial class SimulatedCombatState
     public void Apply<T>(Creature target, int amount, Creature? applier = null) where T : PowerModel
         => ApplyWithBeforeApplied<T>(target, amount, applier, null);
 
+    public void ApplyImitationLearning(Player owner, Player target, int amount)
+    {
+        ImitationLearningPower? existing = EffectivePowers().OfType<ImitationLearningPower>()
+            .FirstOrDefault(power => power.Amount > 0
+                && ReferenceEquals(power.Owner, owner.Creature)
+                && ReferenceEquals(power._playerTarget, target));
+        if (existing != null)
+        {
+            SetPowerAmount(existing, existing.Amount + amount);
+            RecordPowerAmountChange(existing, amount, owner.Creature);
+            return;
+        }
+        Apply<ImitationLearningPower>(owner.Creature, amount, owner.Creature);
+        ImitationLearningPower applied = EffectivePowers().OfType<ImitationLearningPower>()
+            .Last(power => power.Amount > 0
+                && ReferenceEquals(power.Owner, owner.Creature)
+                && power._playerTarget == null);
+        ((ImitationLearningPower)GetMutablePowerInstance(applied)).PlayerTarget = target;
+    }
+
     private int ApplyWithBeforeApplied<T>(Creature target, int amount, Creature? applier, Action<int>? beforeApplied,
         Action<int, PowerModel>? afterAmountChanged = null, T? prototype = null)
         where T : PowerModel
@@ -662,7 +695,15 @@ internal sealed partial class SimulatedCombatState
             return 0;
         }
         bool instanced = incoming.InstanceType == MegaCrit.Sts2.Core.Entities.Powers.PowerInstanceType.Instanced;
-        if (instanced || GetAmount<T>(target) == 0)
+        bool firstApplication = instanced || GetAmount<T>(target) == 0;
+        if (firstApplication && Players.Count > 1
+            && (target.IsPrimaryEnemy || target.IsSecondaryEnemy)
+            && incoming.ShouldScaleInMultiplayer)
+        {
+            amount = (int)incoming.GetScaledAmountForMultiplayer(
+                this, applier, amount, target, CurrentPowerCardSource);
+        }
+        if (firstApplication)
             beforeApplied?.Invoke(amount);
         PowerModel simulated;
         if (instanced)
@@ -695,6 +736,11 @@ internal sealed partial class SimulatedCombatState
         {
             ritual._wasJustAppliedByEnemy = true;
         }
+        if (simulated is PlatingPower plating
+            && previousAmount == 0
+            && simulated._amount > 0
+            && target.IsEnemy)
+            plating.DynamicVars["Decrement"].BaseValue = Players.Count;
         if (simulated is KnockdownPower knockdown && applier != null)
         {
             Player? applyingPlayer = applier.Player
@@ -702,6 +748,32 @@ internal sealed partial class SimulatedCombatState
             if (applyingPlayer == null)
                 throw new InvalidOperationException("击倒 Power 的施加者不是战斗中的玩家。");
             ((StringVar)knockdown.DynamicVars["Applier"]).StringValue = _playerNames[applyingPlayer];
+        }
+        if (simulated is CoveredPower covered && applier != null)
+        {
+            Player coveringPlayer = applier.Player
+                ?? throw new InvalidOperationException("Covered Power 的施加者不是玩家。");
+            ((StringVar)covered.DynamicVars["Applier"]).StringValue = _playerNames[coveringPlayer];
+            if (GetAmount<InterceptPower>(applier) == 0)
+                Apply<InterceptPower>(applier, 1, target);
+            InterceptPower intercept = GetPower<InterceptPower>(applier)
+                ?? throw new InvalidOperationException("Covered Power 未建立 Intercept Power。");
+            ((InterceptPower)GetMutablePowerInstance(intercept)).AddCoveredCreature(target);
+        }
+        if (simulated is GuardedPower guarded && applier != null)
+        {
+            Player guardingPlayer = applier.Player
+                ?? throw new InvalidOperationException("Guarded Power 的施加者不是玩家。");
+            ((StringVar)guarded.DynamicVars["Applier"]).StringValue = _playerNames[guardingPlayer];
+        }
+        if (simulated is TankPower && previousAmount == 0 && simulated._amount > 0)
+        {
+            CombatPredictionState predictionState = _predictionState
+                ?? throw new InvalidOperationException("Tank Power 缺少预测生物状态。");
+            foreach (Player member in Players)
+                if (!ReferenceEquals(member.Creature, target)
+                    && predictionState.GetCreature(member.Creature).IsAlive)
+                    Apply<GuardedPower>(member.Creature, simulated._amount, target);
         }
         afterAmountChanged?.Invoke(amount, simulated);
         if (previousAmount == 0 && simulated._amount != 0 && simulated is PhantomBladesPower phantom)
@@ -932,18 +1004,24 @@ internal sealed partial class SimulatedCombatState
 
     public void RecordThievery(CombatPredictionSimulator simulator, Creature owner)
     {
-        ThieveryPower? source = GetPower<ThieveryPower>(owner);
-        if (source?.Target?.Player is not { } target
-            || simulator.State.GetCreature(source.Target).IsDead)
-            return;
-        int stolen = Math.Min(source.Amount, GetPlayerGold(target));
-        if (stolen <= 0)
-            return;
-        RecordStolenGold(simulator, stolen);
-        ThieveryPower simulated = (ThieveryPower)GetMutablePowerInstance(source);
-        simulated._target = source.Target;
-        simulated.DynamicVars.Gold.BaseValue += stolen;
-        LosePlayerGold(target, stolen);
+        ThieveryPower[] instances = EffectivePowers().OfType<ThieveryPower>()
+            .Where(power => ReferenceEquals(power.Owner, owner)).ToArray();
+        foreach (ThieveryPower source in instances)
+        {
+            if (source.Target is not { } targetCreature
+                || simulator.State.GetCreature(targetCreature).IsDead)
+                continue;
+            Player target = targetCreature.Player
+                ?? throw new InvalidOperationException("Thievery target is not a player.");
+            int stolen = Math.Min(source.Amount, GetPlayerGold(target));
+            if (stolen <= 0)
+                continue;
+            RecordStolenGold(simulator, stolen);
+            ThieveryPower simulated = (ThieveryPower)GetMutablePowerInstance(source);
+            simulated._target = targetCreature;
+            simulated.DynamicVars.Gold.BaseValue += stolen;
+            LosePlayerGold(target, stolen);
+        }
     }
 
     public bool GetNemesisShouldApplyIntangible(Creature owner)
@@ -1260,6 +1338,19 @@ internal sealed partial class SimulatedCombatState
     public void BeginSideTurn(Creature owner)
     {
         ResetCardLifecycleTurn(owner);
+        ResetTurnHistoryForOwner(owner);
+    }
+
+    public void BeginExcludedPlayerSideTurn(Player player)
+    {
+        ResetTurnCounter(ref _cardsPlayedThisTurn, player.Creature);
+        ResetTurnCounter(ref _manualCardsPlayedThisTurn, player.Creature);
+        _fetchCardsPlayedThisTurn?.Clear();
+        ResetTurnHistoryForOwner(player.Creature);
+    }
+
+    private void ResetTurnHistoryForOwner(Creature owner)
+    {
         ResetTurnCounter(ref _attacksPlayedThisTurn, owner);
         ResetTurnCounter(ref _shivsPlayedThisTurn, owner);
         ResetTurnCounter(ref _blockCardsPlayedThisTurn, owner);
@@ -2341,6 +2432,7 @@ internal sealed partial class SimulatedCombatState
         AddCreatureIntMap(ref fingerprint, 'b', _blockCardsPlayedThisTurn);
         AddCreatureIntMap(ref fingerprint, 'l', _skillCardsPlayedThisTurn);
         AddCreatureIntMap(ref fingerprint, 'x', _cardsExhaustedThisTurn);
+        fingerprint.Add(_cardsExhaustedAfterRoot);
         AddCreatureSet(ref fingerprint, 'd', _doomAppliersThisTurn);
         AddCreatureSet(ref fingerprint, 'L', _unblockedDamageThisTurn);
         AddPoweredAttackHits(ref fingerprint, _poweredAttackHitsThisTurn);
@@ -2405,6 +2497,8 @@ internal sealed partial class SimulatedCombatState
             item.Add(ritual._wasJustAppliedByEnemy);
         if (power is SurroundedPower surrounded)
             item.Add((int)PowerPredictionStateSupport.SurroundedFacing(simulator, surrounded));
+        if (power is ImitationLearningPower imitation)
+            item.Add(imitation.PlayerTarget.NetId);
         ulong dynamicFirst = 0;
         ulong dynamicSecond = 0;
         int dynamicCount = 0;

@@ -308,7 +308,19 @@ function Remove-HeadlessRuntimeInstance([hashtable]$Context) {
             throw "Refusing runtime cleanup through a reparse point: $($entry.FullName)"
         }
     }
-    Remove-Item -LiteralPath $root -Recurse -Force
+    # Windows may release mapped assemblies shortly after the owned process exits.
+    # The ownership and reparse checks above authorize only this resolved instance.
+    for ($attempt = 0; ; $attempt++) {
+        try {
+            if (Test-Path -LiteralPath $root) {
+                Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction Stop
+            }
+            break
+        } catch [UnauthorizedAccessException], [IO.IOException] {
+            if ($attempt -ge 4) { throw }
+            Start-Sleep -Milliseconds 500
+        }
+    }
     Write-Host "UNATTENDED_INSTANCE_REMOVED path=$root"
 }
 
@@ -563,7 +575,7 @@ function Enter-HeadlessHostLease([hashtable]$Context, [Diagnostics.Process]$Exis
             $canEnter = $unknownGames.Count -eq 0 -and
                 ($null -ne $game -or $earlierQueued.Count -eq 0) -and
                 ($Context.Mode -ne 'exclusive' -or $active.Count -eq 0) -and
-                @($active | Where-Object { $_.mode -eq 'exclusive' }).Count -eq 0 -and $active.Count -lt 2 -and
+                @($active | Where-Object { $_.mode -eq 'exclusive' }).Count -eq 0 -and $active.Count -lt 4 -and
                 ($otherCpu + $Context.Cpu) -le $capacity.cpu -and
                 ($otherMemory + $Context.MemoryMiB) -le ($capacity.totalMiB - 2048) -and
                 ($otherOutstanding + $ownOutstanding + 2048) -le $capacity.availableMiB
@@ -595,9 +607,17 @@ function Enter-HeadlessHostLease([hashtable]$Context, [Diagnostics.Process]$Exis
 }
 
 function Set-HeadlessHostGame([hashtable]$Context, [Diagnostics.Process]$Game) {
-    $identity = Get-HeadlessProcessIdentity $Game
-    if (-not [string]::Equals($identity.exe, (Join-Path $Context.GameRoot 'SlayTheSpire2.exe'), [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Started headless executable is not the instance's private game."
+    $expectedExecutable = Join-Path $Context.GameRoot 'SlayTheSpire2.exe'
+    for ($attempt = 0; ; $attempt++) {
+        $identity = Get-HeadlessProcessIdentity $Game
+        if ([string]::Equals($identity.exe, $expectedExecutable, [StringComparison]::OrdinalIgnoreCase)) {
+            break
+        }
+        if ($attempt -ge 10) {
+            throw "Started headless executable differs: expected=$expectedExecutable actual=$($identity.exe) pid=$($identity.pid)"
+        }
+        # Wait for MainModule publication without weakening the exact-path check.
+        Start-Sleep -Milliseconds 50
     }
     $hostLock = Open-HeadlessHostLock $Context
     try {

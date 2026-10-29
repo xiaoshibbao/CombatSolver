@@ -1,9 +1,9 @@
 {
   "id": "CombatSolver",
-  "name": "战斗路线求解器",
+  "name": "战斗路线求解器（本地多人版）",
   "author": "Torch",
-  "description": "异步搜索单场战斗路线，支持三态药水策略、路线复用和连续全自动执行。",
-  "version": "0.50.1",
+  "description": "单人整场战斗搜索与2～4人本地角色条件预测，支持跨玩家状态、支援目标、原生网络执行和状态变化重评估。",
+  "version": "0.50.2",
   "has_pck": false,
   "has_dll": true,
   "affects_gameplay": false,

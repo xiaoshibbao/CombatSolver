@@ -71,6 +71,13 @@ internal enum SolverResultScope
     RouteAdoption,
 }
 
+internal enum MultiplayerPlanStyle
+{
+    Output,
+    Defense,
+    Setup,
+}
+
 [Flags]
 internal enum SearchRouteTraits
 {
@@ -1411,6 +1418,13 @@ internal sealed record CachedContinuation(
 
 internal sealed class SolverResult
 {
+    public bool IsMultiplayer { get; internal set; }
+    public MultiplayerPlanStyle? MultiplayerStyle { get; internal set; }
+    public IReadOnlyList<SolverResult> MultiplayerAlternatives { get; internal set; } = [];
+    public int MultiplayerEffectiveDamage { get; internal set; }
+    public int MultiplayerSetupValue { get; internal set; }
+    public int MultiplayerCurrentTurnProjectedHp { get; internal set; }
+    public bool MultiplayerSupportAdded { get; internal set; }
     public SolverInterimResult? ComparisonQuality { get; internal set; }
     public string? ComparisonRootState { get; internal set; }
     public bool WasRestoredFromCache { get; internal set; }
@@ -1744,6 +1758,7 @@ internal sealed class SolverResult
         };
         continuation = new SolverResult
         {
+            IsMultiplayer = IsMultiplayer,
             StartTurnNumber = cached.StartTurnNumber,
             TurnSetupChoices = TurnSetupChoices,
             TurnSetupPlayState = TurnSetupPlayState,
