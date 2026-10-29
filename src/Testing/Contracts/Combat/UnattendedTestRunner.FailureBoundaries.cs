@@ -72,13 +72,13 @@ internal sealed partial class UnattendedTestRunner
         if (!playerMessage.Contains("The Watcher ［Test］（Watcher）", StringComparison.Ordinal)
             || !playerMessage.Contains("求解器暂未适配此内容性 Mod", StringComparison.Ordinal)
             || !playerMessage.Contains("无法求解", StringComparison.Ordinal)
-            || playerMessage.Contains(SolverUiTokens.BugReportUploadInstruction, StringComparison.Ordinal)
+            || playerMessage.Contains("上传问题包", StringComparison.Ordinal)
             || playerMessage.Contains("WatcherEnchantStackHookProxy", StringComparison.Ordinal))
         {
             throw new InvalidOperationException("内容性 Mod 提示必须显示暂未适配、来源和无法求解，且无需上传日志。");
         }
         if (SolverController.FormatSearchFailureForTesting(new InvalidOperationException("wrapped", incompatible), true)
-            .Contains(SolverUiTokens.BugReportUploadInstruction, StringComparison.Ordinal))
+            .Contains("上传问题包", StringComparison.Ordinal))
             throw new InvalidOperationException("第三方玩法异常被包装后仍引导上传日志。");
         CombatBugReportIssueLedger ledger = new();
         ledger.RecordFailure(CombatBugReportIssueKind.SearchSetupFailure, incompatible);

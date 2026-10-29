@@ -102,6 +102,17 @@ internal sealed partial class UnattendedTestRunner
 
     private async Task AssertUiLocalizationAsync(CombatState combat)
     {
+        var assembly = typeof(Entry).Assembly;
+        foreach (string retired in new[] { "OnlinePresence", "RunStatistics", "CombatShowcaseCollector",
+                     "ClientUpdateNotice", "CombatBugReportUploader", "BugReportUploadDialog" })
+            if (assembly.GetType("CombatSolver." + retired) != null)
+                throw new InvalidOperationException("Retired outbound feature remains in the assembly: " + retired);
+        foreach (System.Reflection.AssemblyMetadataAttribute metadata in
+                 assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyMetadataAttribute), false))
+            if (metadata.Key.StartsWith("Presence", StringComparison.Ordinal)
+                || metadata.Key.StartsWith("Showcase", StringComparison.Ordinal))
+                throw new InvalidOperationException("Retired service configuration is embedded in the assembly.");
+        _completedChecks.Add("OfflineBuild:NoPresence:NoStatistics:NoUpload:NoEmbeddedServiceConfiguration");
         using Stream stream = typeof(SolverText).Assembly.GetManifestResourceStream("CombatSolver.UI.English.json")!;
         var catalog = JsonSerializer.Deserialize<Dictionary<string, string>>(stream)!;
         foreach ((string source, string english) in catalog)
@@ -118,6 +129,13 @@ internal sealed partial class UnattendedTestRunner
         try
         {
             await AssertCardLanguageRoundTripAsync();
+            foreach (string target in new[] { "eng", "zhs", "zht" })
+            {
+                LocManager.Instance.SetLanguage(target);
+                await _host.ToSignal(_host.GetTree(), SceneTree.SignalName.ProcessFrame);
+                await SolverOverlay.AssertCollapsedCurrentTurnForTesting();
+                _completedChecks.Add($"CollapsedRoute:{target}:CurrentTurnVisible:FutureHidden:ExpandedRestoresSameRow");
+            }
             foreach (string target in new[] { "eng", "zhs", "zht" })
             {
                 LocManager.Instance.SetLanguage(target);
@@ -222,15 +240,11 @@ internal sealed partial class UnattendedTestRunner
                     SolverSettingsPanel settings = new();
                     harness.AddChild(settings);
                     settings.Reload();
-                    if (!settings.SettingsTabsConfiguredForTesting || !settings.UploadProgressConfiguredForTesting
+                    if (!settings.SettingsTabsConfiguredForTesting
                         || !settings.MultiplayerControlsConfiguredForTesting
                         || !settings.PotionRewardPredictionConfiguredForTesting
                         || !settings.ExerciseSettingsTabSwitchingForTesting())
                         throw new InvalidOperationException($"Settings localization failed: {target}");
-                    BugReportUploadDialog dialog = new("");
-                    harness.AddChild(dialog);
-                    if (!dialog.ExerciseResponsiveBoundsForTesting())
-                        throw new InvalidOperationException($"Upload dialog bounds failed: {target}");
                     if (english)
                     {
                         AssertEnglishControls(harness);
@@ -238,8 +252,6 @@ internal sealed partial class UnattendedTestRunner
                             throw new InvalidOperationException("Multiplayer depth/time UI edits were not persisted.");
                         _completedChecks.Add("MultiplayerSettings:EditedDepthAndTime:Persisted:Restored");
                     }
-                    if (!settings.ExerciseUploadCompletionTransitionForTesting())
-                        throw new InvalidOperationException($"Upload transitions failed: {target}");
                 }
                 finally { harness.Free(); }
 
@@ -275,7 +287,7 @@ internal sealed partial class UnattendedTestRunner
                 if (!failure.Contains(english ? "Search failed" : "计算失败", StringComparison.Ordinal)
                     || !failure.Contains(english ? "Off (one thread)" : "关闭（单线程）", StringComparison.Ordinal))
                     throw new InvalidOperationException($"Failure instructions are not localized: {target}");
-                _completedChecks.Add($"UiLocalization:{target}:Catalog{catalog.Count}:Settings:UploadTransitions:DynamicStatus:FailureInstructions");
+                _completedChecks.Add($"UiLocalization:{target}:Catalog{catalog.Count}:Settings:NoUploads:DynamicStatus:FailureInstructions");
             }
         }
         finally

@@ -22,6 +22,7 @@ internal sealed partial class SolverRelicStrategyPanel : PanelContainer
     public SolverRelicStrategyPanel()
     {
         Name = "RelicStrategyPanel";
+        Theme = SolverUiTokens.Fonts.Theme;
         Visible = false;
         CustomMinimumSize = new(PreferredWidth, 0);
         MouseFilter = MouseFilterEnum.Stop;

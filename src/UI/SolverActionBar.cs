@@ -5,9 +5,10 @@ namespace CombatSolver;
 internal readonly record struct SolverActionBarState(bool Collapsed, bool Searching, bool ShowAdopt, bool ShowFreeze);
 
 // Owns layout only. The overlay retains command bindings and capability checks.
+// The turn command spans the rail; secondary commands share a two-column grid below it.
 internal sealed partial class SolverActionBar : VBoxContainer
 {
-    private readonly HFlowContainer _actions;
+    private readonly GridContainer _actions;
     private readonly Control _autoStart;
     private readonly HBoxContainer _memoryRow;
     private readonly Button _execute;
@@ -32,19 +33,35 @@ internal sealed partial class SolverActionBar : VBoxContainer
         _freeze = freeze;
         _fullAuto = fullAuto;
         _memory = memory;
-        _actions = CreateFlow("CombatActions");
         _autoStart = autoStart;
-        HBoxContainer actionRow = new() { Name = "ActionRow", MouseFilter = MouseFilterEnum.Pass };
-        actionRow.AddThemeConstantOverride("separation", SolverUiTokens.Spacing.Md);
-        _actions.AddChild(fullAuto);
-        _actions.AddChild(adopt);
-        _actions.AddChild(freeze);
-        _actions.AddChild(execute);
-        _actions.AddChild(recalculate);
-        _actions.AddChild(stop);
-        actionRow.AddChild(_actions);
-        actionRow.AddChild(autoStart);
-        AddChild(actionRow);
+
+        HBoxContainer primaryRow = new() { Name = "PrimaryRow", MouseFilter = MouseFilterEnum.Pass };
+        primaryRow.AddThemeConstantOverride("separation", SolverUiTokens.Spacing.Sm);
+        foreach (Button command in new[] { execute, stop })
+        {
+            FillCell(command);
+            command.CustomMinimumSize = new Vector2(0, SolverUiTokens.Size.PrimaryButtonHeight);
+            primaryRow.AddChild(command);
+        }
+        AddChild(primaryRow);
+
+        _actions = new GridContainer
+        {
+            Name = "CombatActions",
+            Columns = 2,
+            MouseFilter = MouseFilterEnum.Pass,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        _actions.AddThemeConstantOverride("h_separation", SolverUiTokens.Spacing.Sm);
+        _actions.AddThemeConstantOverride("v_separation", SolverUiTokens.Spacing.Sm);
+        foreach (Button command in new[] { fullAuto, adopt, freeze, recalculate })
+        {
+            FillCell(command);
+            _actions.AddChild(command);
+        }
+        AddChild(_actions);
+
+        AddChild(autoStart);
         _memoryRow = new HBoxContainer { Name = "MemoryRow", MouseFilter = MouseFilterEnum.Pass };
         _memoryRow.AddThemeConstantOverride("separation", SolverUiTokens.Spacing.Sm);
         _memoryRow.AddChild(memory);
@@ -88,6 +105,7 @@ internal sealed partial class SolverActionBar : VBoxContainer
                     || _execute.Visible == searching
                     || _memory.Visible == collapsed || _autoStart.Visible == collapsed
                     || _memoryRow.Visible == collapsed
+                    || _execute.GetParent() != _stop.GetParent()
                     || _fullAuto.GetParent() != _actions || _fullAuto.GetIndex() != 0
                     || _adopt.GetIndex() != 1 || _freeze.GetIndex() != 2)
                     throw new InvalidOperationException("Action bar layout state did not match its display snapshot.");
@@ -100,16 +118,10 @@ internal sealed partial class SolverActionBar : VBoxContainer
         }
     }
 
-    private static HFlowContainer CreateFlow(string name)
+    // Commands size to their cell; fixed widths from the old single-row bar would overflow the rail.
+    private static void FillCell(Button command)
     {
-        HFlowContainer flow = new()
-        {
-            Name = name,
-            MouseFilter = MouseFilterEnum.Pass,
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-        };
-        flow.AddThemeConstantOverride("h_separation", SolverUiTokens.Spacing.Md);
-        flow.AddThemeConstantOverride("v_separation", SolverUiTokens.Spacing.Xs);
-        return flow;
+        command.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        command.CustomMinimumSize = new Vector2(0, command.CustomMinimumSize.Y);
     }
 }

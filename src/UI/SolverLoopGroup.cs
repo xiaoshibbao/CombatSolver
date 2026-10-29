@@ -100,14 +100,7 @@ internal sealed partial class SolverLoopGroup : PanelContainer
 
         StyleBoxFlat box = new()
         {
-            BgColor = SolverUiTokens.IsLightTheme
-                ? new Color(0.94f, 0.95f, 0.97f, 0.75f)
-                : new Color(0.12f, 0.14f, 0.17f, 0.50f),
-            BorderColor = SolverUiTokens.Palette.BorderSubtle,
-            BorderWidthTop = 1,
-            BorderWidthBottom = 1,
-            BorderWidthLeft = 1,
-            BorderWidthRight = 1,
+            BgColor = SolverUiTokens.Palette.Layer,
             CornerRadiusTopLeft = (int)SolverUiTokens.Radius.Medium,
             CornerRadiusTopRight = (int)SolverUiTokens.Radius.Medium,
             CornerRadiusBottomLeft = (int)SolverUiTokens.Radius.Medium,
@@ -134,19 +127,13 @@ internal sealed partial class SolverLoopGroup : PanelContainer
             SizeFlagsVertical = SizeFlags.ShrinkCenter,
             MouseFilter = MouseFilterEnum.Ignore,
         };
-        Color badgeBg = SolverUiTokens.IsLightTheme
-            ? SolverUiTokens.Palette.Accent.Lightened(0.85f)
-            : SolverUiTokens.Palette.Accent.Darkened(0.70f);
-        Color badgeBorder = SolverUiTokens.IsLightTheme
-            ? SolverUiTokens.Palette.Accent.Lightened(0.40f)
-            : SolverUiTokens.Palette.Accent.Darkened(0.35f);
         _badge.AddThemeStyleboxOverride("panel", SolverUiTokens.CreateBox(
-            badgeBg,
-            badgeBorder,
+            SolverUiTokens.Palette.Tint(SolverUiTokens.Palette.Accent, 1.4f),
+            Godot.Colors.Transparent,
             SolverUiTokens.Radius.Small,
             horizontalPadding: 8,
             verticalPadding: 3,
-            borderWidth: 1));
+            borderWidth: 0));
 
         _badgeLabel = SolverUiTokens.CreateLabel(
             SolverText.Format($"循环 ×{run.Repetitions}"),

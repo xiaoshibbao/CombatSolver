@@ -17,8 +17,7 @@ internal sealed partial class CombatBeamSolver
         RouteAnnotations originalAnnotations,
         Stopwatch requestClock)
     {
-        if (root.PlayerCount == 1 || _includeTurnSetup
-            || requestClock.ElapsedMilliseconds >= _profile.SoftTimeBudgetMilliseconds)
+        if (_includeTurnSetup)
             return null;
 
         PlanAction[] actions = original.Actions.ToArray();
@@ -34,15 +33,14 @@ internal sealed partial class CombatBeamSolver
             IReadOnlyList<PredictedCard> hand = simulator.State.GetPlayerCombatState(_player).Hand.Cards;
             for (int handIndex = 0; handIndex < hand.Count; handIndex++)
             {
-                if (requestClock.ElapsedMilliseconds >= _profile.SoftTimeBudgetMilliseconds)
-                    return null;
+                ReplayCancellationToken.ThrowIfCancellationRequested();
                 PredictedCard card = hand[handIndex];
                 if (!simulator.CanPlay(card))
                     continue;
                 foreach ((int targetIndex, Creature? target) in TargetsFor(card, simulator))
                 {
-                    if (!IsPureTeammateSupport(card, target)
-                        || !card.Original.IsValidTarget(target))
+                    bool pureSupport = IsPureTeammateSupport(card, target);
+                    if (!card.Original.IsValidTarget(target))
                         continue;
                     string stateKey = CardChoiceSupport.ChoiceCardKey(card);
                     PlanAction support = new(
@@ -60,6 +58,12 @@ internal sealed partial class CombatBeamSolver
                             CardChoiceSupport.ChoiceCardKey(prior) == stateKey),
                         CardEnchantmentId: card.Preview.Enchantment?.Id.Entry ?? "",
                         CardUpgradeLevel: card.Preview.CurrentUpgradeLevel);
+                    // A bounded finalization pass may spend otherwise unused resources, but
+                    // never guesses choices or advances any shared random stream after timeout.
+                    bool deterministic = IsSafeDeterministicTail(prefix, actions.Take(insertAt), support, pureSupport);
+                    if (!deterministic && (!pureSupport
+                        || requestClock.ElapsedMilliseconds >= _profile.SoftTimeBudgetMilliseconds))
+                        continue;
                     bool teammateChoice = card.Preview is Tutor;
                     if (teammateChoice
                         && card.GetEnergyCostWithModifiers(simulator,
@@ -83,6 +87,10 @@ internal sealed partial class CombatBeamSolver
                         : !inserted.Snapshot.PlayerDead
                         && inserted.Snapshot.ProjectedPlayerHp >= original.Snapshot.ProjectedPlayerHp
                         && inserted.Snapshot.PlayerHp >= original.Snapshot.PlayerHp
+                        && inserted.Snapshot.PlayerMaxHp >= original.Snapshot.PlayerMaxHp
+                        && inserted.Snapshot.LongTermResourceValue >= original.Snapshot.LongTermResourceValue
+                        && inserted.FutureSoldHp <= original.FutureSoldHp
+                        && inserted.PotionCount <= original.PotionCount
                         && inserted.Snapshot.CumulativePlayerHpLost <= original.Snapshot.CumulativePlayerHpLost
                         && inserted.Snapshot.Energy >= original.Snapshot.Energy
                         && inserted.Snapshot.EnemyHp <= original.Snapshot.EnemyHp
@@ -104,6 +112,85 @@ internal sealed partial class CombatBeamSolver
         {
             prefix.ReleaseSimulator();
         }
+    }
+
+    private bool IsSafeDeterministicTail(SimulationSnapshot before,
+        IEnumerable<PlanAction> prefix, PlanAction action, bool pureSupport)
+    {
+        SimulationSnapshot after = Replay([.. prefix, action]);
+        try
+        {
+            if (after.HasRisk || after.BoundaryReason != SearchBoundaryReason.None
+                || after.Turn != before.Turn || after.PlayerDead
+                || after.PlayerHp < before.PlayerHp || after.PlayerMaxHp < before.PlayerMaxHp
+                || after.PlayerBlock < before.PlayerBlock
+                || after.CumulativePlayerHpLost > before.CumulativePlayerHpLost
+                || after.LongTermResourceValue < before.LongTermResourceValue)
+                return false;
+            if (!pureSupport && after.EnemyHp >= before.EnemyHp && after.PlayerBlock <= before.PlayerBlock)
+                return false;
+            return ContinuationStamp.CapturePredicted(_player, before.Simulator, before.Turn,
+                    _forecast, _startTurnNumber).RngStateText
+                == ContinuationStamp.CapturePredicted(_player, after.Simulator, after.Turn,
+                    _forecast, _startTurnNumber).RngStateText;
+        }
+        finally { after.ReleaseSimulator(); }
+    }
+
+    private MultiplayerSupportInsertion? TryCompleteMultiplayerTurn(
+        SearchNode original, RouteAnnotations annotations)
+    {
+        if (_includeTurnSetup || original.Snapshot.HasRisk
+            || original.Snapshot.PlayerDead || original.Snapshot.AllEnemiesDead
+            || original.Snapshot.BoundaryReason is SearchBoundaryReason.PendingChoice
+                or SearchBoundaryReason.UnsupportedEffect or SearchBoundaryReason.DynamicResolution)
+            return null;
+        PlanAction[] actions = original.Actions.ToArray();
+        if (actions.Any(action => action.Turn == _startTurnNumber
+            && (action.Kind == PlanActionKind.EndTurn || action.EndsPlayerTurn)))
+            return null;
+        if (actions.Any(action => action.Turn != _startTurnNumber))
+            return null;
+        SearchNode? completed = ReplayAdjustedRoute(
+            [.. actions, new PlanAction(PlanActionKind.EndTurn, _startTurnNumber)],
+            original.GetTurnSetupChoices(), original.GetTurnSetupPlayState(), annotations);
+        if (completed == null)
+            return null;
+        if (completed.Snapshot.HasRisk || completed.Snapshot.BoundaryReason != SearchBoundaryReason.None)
+        {
+            completed.Snapshot.ReleaseSimulator();
+            return null;
+        }
+        return new(completed, BuildRouteAnnotations(completed));
+    }
+
+    internal (IReadOnlyList<PlanAction> Actions, ContinuationStamp State) VerifyTurnFinalizationForTesting()
+    {
+        SimulationSnapshot snapshot = Replay([]);
+        SearchNode node = new(null, 0, snapshot.PotionUseCount, snapshot.PotionStrategicCost,
+            snapshot.Turn, SearchRouteTraits.None, 0, snapshot.Score, snapshot.StateKey,
+            snapshot.HasRisk, snapshot.BoundaryReason, false, null, snapshot,
+            CombatProgressState.Capture(snapshot));
+        try
+        {
+            RouteAnnotations annotations = BuildRouteAnnotations(node);
+            MultiplayerSupportInsertion completed = TryCompleteMultiplayerTurn(node, annotations)
+                ?? throw new InvalidOperationException("Stable empty multiplayer prefix did not acquire an end-turn boundary.");
+            node.Snapshot.ReleaseSimulator();
+            node = completed.Node;
+            annotations = completed.Annotations;
+            for (int count = 0; count < 16; count++)
+            {
+                MultiplayerSupportInsertion? tail = TryAppendPureSupport(node, annotations, Stopwatch.StartNew());
+                if (tail == null) break;
+                node.Snapshot.ReleaseSimulator();
+                node = tail.Node;
+                annotations = tail.Annotations;
+            }
+            return (node.Actions.ToArray(), ContinuationStamp.CapturePredicted(
+                _player, node.Snapshot.Simulator, node.Snapshot.Turn, _forecast, _startTurnNumber));
+        }
+        finally { node.Snapshot.ReleaseSimulator(); }
     }
 
     internal SolverCurrentTurnPreview? ReevaluateMultiplayerCurrentTurn(

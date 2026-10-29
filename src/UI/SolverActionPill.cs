@@ -21,12 +21,7 @@ internal static class SolverActionPill
             MouseFilter = Control.MouseFilterEnum.Pass,
             TooltipText = action.Tooltip,
         };
-        pill.AddThemeStyleboxOverride("panel", SolverUiTokens.CreateBox(
-            SolverUiTokens.Palette.SurfaceRaised,
-            SolverUiTokens.Palette.BorderSubtle,
-            SolverUiTokens.Radius.Pill,
-            SolverUiTokens.Spacing.Sm,
-            SolverUiTokens.Spacing.Xs));
+        pill.AddThemeStyleboxOverride("panel", CreateChipBox(marker));
 
         HBoxContainer content = new()
         {
@@ -35,13 +30,7 @@ internal static class SolverActionPill
             SizeFlagsVertical = Control.SizeFlags.ShrinkCenter,
         };
         content.AddThemeConstantOverride("separation", SolverUiTokens.Spacing.Xs);
-        content.AddChild(new ColorRect
-        {
-            Color = marker,
-            CustomMinimumSize = new Vector2(3, 14),
-            SizeFlagsVertical = Control.SizeFlags.ShrinkCenter,
-            MouseFilter = Control.MouseFilterEnum.Ignore,
-        });
+        content.AddChild(CreateMarkerDot(marker));
         Label titleLabel = SolverUiTokens.CreateLabel(
             action.Title,
             SolverUiTokens.Type.Body,
@@ -129,12 +118,7 @@ internal static class SolverActionPill
             MouseFilter = Control.MouseFilterEnum.Pass,
             TooltipText = text,
         };
-        pill.AddThemeStyleboxOverride("panel", SolverUiTokens.CreateBox(
-            SolverUiTokens.Palette.SurfaceRaised,
-            SolverUiTokens.Palette.BorderSubtle,
-            SolverUiTokens.Radius.Pill,
-            SolverUiTokens.Spacing.Sm,
-            SolverUiTokens.Spacing.Xs));
+        pill.AddThemeStyleboxOverride("panel", CreateChipBox(SolverUiTokens.Palette.Choice));
 
         HBoxContainer content = new()
         {
@@ -143,13 +127,7 @@ internal static class SolverActionPill
             SizeFlagsVertical = Control.SizeFlags.ShrinkCenter,
         };
         content.AddThemeConstantOverride("separation", SolverUiTokens.Spacing.Xs);
-        content.AddChild(new ColorRect
-        {
-            Color = SolverUiTokens.Palette.Choice,
-            CustomMinimumSize = new Vector2(3, 14),
-            SizeFlagsVertical = Control.SizeFlags.ShrinkCenter,
-            MouseFilter = Control.MouseFilterEnum.Ignore,
-        });
+        content.AddChild(CreateMarkerDot(SolverUiTokens.Palette.Choice));
         content.AddChild(SolverUiTokens.CreateLabel(
             text,
             SolverUiTokens.Type.Body,
@@ -167,11 +145,12 @@ internal static class SolverActionPill
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         pill.AddThemeStyleboxOverride("panel", SolverUiTokens.CreateBox(
-            SolverUiTokens.Palette.SurfaceRaised,
-            SolverUiTokens.Palette.BorderSubtle,
+            SolverUiTokens.Palette.LayerRaised,
+            Godot.Colors.Transparent,
             SolverUiTokens.Radius.Pill,
             SolverUiTokens.Spacing.Sm,
-            SolverUiTokens.Spacing.Xs));
+            SolverUiTokens.Spacing.Xs,
+            borderWidth: 0));
         pill.AddChild(SolverUiTokens.CreateLabel(text, SolverUiTokens.Type.Body, color, FontType.Bold));
         return pill;
     }
@@ -183,6 +162,30 @@ internal static class SolverActionPill
         return group;
     }
 
+    // Flat chip: a wash of the card-type color with no outline.
+    private static StyleBoxFlat CreateChipBox(Color tone)
+        => SolverUiTokens.CreateBox(
+            SolverUiTokens.Palette.Tint(tone, 1.2f),
+            Godot.Colors.Transparent,
+            SolverUiTokens.Radius.Pill,
+            SolverUiTokens.Spacing.Sm,
+            SolverUiTokens.Spacing.Xs,
+            borderWidth: 0);
+
+    private static readonly Dictionary<Color, Texture2D> MarkerDots = [];
+
+    private static TextureRect CreateMarkerDot(Color color)
+        => new()
+        {
+            Texture = MarkerDots.TryGetValue(color, out Texture2D? dot)
+                ? dot
+                : MarkerDots[color] = SolverUiTokens.CreateCircleTexture(color, 8),
+            StretchMode = TextureRect.StretchModeEnum.KeepCentered,
+            CustomMinimumSize = new Vector2(8, 14),
+            SizeFlagsVertical = Control.SizeFlags.ShrinkCenter,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+
     private static Color ActionColor(SolverOverlayActionVisualKind kind)
         => kind switch
         {
@@ -191,6 +194,6 @@ internal static class SolverActionPill
             SolverOverlayActionVisualKind.Power => SolverUiTokens.Palette.Power,
             SolverOverlayActionVisualKind.Negative => SolverUiTokens.Palette.Negative,
             SolverOverlayActionVisualKind.Potion => SolverUiTokens.Palette.Potion,
-            _ => SolverUiTokens.Palette.Border,
+            _ => SolverUiTokens.Palette.TextMuted,
         };
 }

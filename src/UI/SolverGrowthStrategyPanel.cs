@@ -28,6 +28,7 @@ internal sealed partial class SolverGrowthStrategyPanel : PanelContainer
     public SolverGrowthStrategyPanel()
     {
         Name = "GrowthStrategyPanel";
+        Theme = SolverUiTokens.Fonts.Theme;
         Visible = false;
         MouseFilter = MouseFilterEnum.Stop;
         CustomMinimumSize = new Vector2(PreferredWidth, 0);

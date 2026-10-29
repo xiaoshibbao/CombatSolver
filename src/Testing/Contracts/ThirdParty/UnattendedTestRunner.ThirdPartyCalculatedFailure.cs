@@ -31,7 +31,7 @@ internal sealed partial class UnattendedTestRunner
                 var ledger = new CombatBugReportIssueLedger();
                 ledger.RecordFailure(CombatBugReportIssueKind.SearchSetupFailure, exception);
                 if (exception.ModId != "TestCalculatedMod" || !exception.Subject.Contains(live.Id.Entry)
-                    || !message.Contains("Test Calculated Mod") || message.Contains(SolverUiTokens.BugReportUploadInstruction)
+                    || !message.Contains("Test Calculated Mod") || message.Contains("上传问题包")
                     || ledger.RequiresPlayerUpload)
                     throw new InvalidOperationException("Third-party calculated failure lost its source or requested upload.");
             }

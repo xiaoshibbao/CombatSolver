@@ -18,7 +18,7 @@
 | [多人历史](archive/multiplayer/README.md) | 上游归档的需求与验收记录 |
 | [问题](issues/README.md) / [社区验收](community/testing-guide.md) | 未解决问题和贡献证据 |
 | [性能](performance/README.md) / [策略](strategy/README.md) / [重构](refactoring/README.md) | 当前工作与历史路由 |
-| [在线统计](ONLINE_STATISTICS.md) / [跑局战绩](RUN_STATISTICS.md) | 模组上报、隐私与客户端生命周期 |
-| [问题报告协议](BUG_REPORT_PROTOCOL.md) | 客户端导出与上传 |
+| [在线统计历史](ONLINE_STATISTICS.md) / [跑局战绩历史](RUN_STATISTICS.md) | 上游历史协议；本 fork 已移除上报客户端 |
+| [问题报告协议](BUG_REPORT_PROTOCOL.md) | 本地诊断归档；在线上传已移除 |
 | [玩家更新日志](releases/README.md) / [工坊介绍](workshop/README.md) | 已发布正文与渠道介绍 |
 | [历史资料](archive/README.md) | 冻结报告、计划和开发/测试分卷 |

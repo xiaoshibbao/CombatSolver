@@ -21,25 +21,24 @@ internal static class SolverUiTokens
     public static void ConfigureTheme(SolverOverlayTheme theme)
         => _activeTheme = theme;
 
-    public static string BugReportUploadInstruction => SolverText.Get("请在设置中点击“上传问题包”提交日志。");
-    public static string BugReportUploadInstructionRichText
-        => $"[color={Palette.WarningHex}]{BugReportUploadInstruction}[/color]";
     public static string ParallelSearchFailureInstruction =>
-        SolverText.Get("请先在设置中点击“上传问题包”提交日志，再将“搜索并行度”改为“关闭（单线程）”后重试。");
-    public static string SearchFailureInstructionRichText(bool parallelSearchWasEnabled)
-        => $"[color={Palette.WarningHex}]" +
-           $"{(parallelSearchWasEnabled ? ParallelSearchFailureInstruction : BugReportUploadInstruction)}[/color]";
+        SolverText.Get("可将“搜索并行度”改为“关闭（单线程）”后重试。");
+    // Leading newline included so callers can append it unconditionally.
+    public static string SearchFailureHintRichText(bool parallelSearchWasEnabled)
+        => parallelSearchWasEnabled
+            ? $"\n[color={Palette.WarningHex}]{ParallelSearchFailureInstruction}[/color]"
+            : string.Empty;
 
     public static string AdaptRichTextToActiveTheme(string text)
     {
         (string Dark, string Light, string Active)[] colors =
         [
-            ("#aab3c2", "#5f5f5f", Palette.TextSecondaryHex),
-            ("#7c8597", "#8a8a8a", Palette.TextMutedHex),
-            ("#6cb4e4", "#0078d4", Palette.AccentHex),
-            ("#e0b25c", "#9d5d00", Palette.WarningHex),
-            ("#ec6f6f", "#c42b1c", Palette.DangerHex),
-            ("#6cc287", "#0f7b0f", Palette.SuccessHex),
+            ("#a3abb9", "#5f5f5f", Palette.TextSecondaryHex),
+            ("#6f7888", "#8a8a8a", Palette.TextMutedHex),
+            ("#4f9dff", "#0078d4", Palette.AccentHex),
+            ("#f5b544", "#9d5d00", Palette.WarningHex),
+            ("#ff6b6b", "#c42b1c", Palette.DangerHex),
+            ("#4ade80", "#0f7b0f", Palette.SuccessHex),
         ];
         foreach ((string dark, string light, string active) in colors)
         {
@@ -48,6 +47,54 @@ internal static class SolverUiTokens
         }
         return text;
     }
+    /// <summary>
+    /// One UI typeface for every language: PingFang when installed, otherwise the closest
+    /// modern sans the system has. Bold is a semibold weight so emphasis stays light.
+    /// </summary>
+    public static class Fonts
+    {
+        private static readonly string[] Families =
+        [
+            "PingFang SC",
+            "Noto Sans SC",
+            "Source Han Sans SC",
+            "Microsoft YaHei UI",
+            "Microsoft YaHei",
+        ];
+
+        private static Font? _regular;
+        private static Font? _bold;
+        private static Theme? _theme;
+
+        public static Font Regular => _regular ??= Create(400);
+        public static Font Bold => _bold ??= Create(600);
+
+        /// <summary>Root theme so controls without explicit overrides inherit the same typeface.</summary>
+        public static Theme Theme => _theme ??= new Theme { DefaultFont = Regular };
+
+        private static Font Create(int weight)
+        {
+            SystemFont system = new()
+            {
+                FontNames = Families,
+                FontWeight = weight,
+                AllowSystemFallback = true,
+            };
+            // Static families pick the face by FontWeight; variable ones (Noto Sans SC) need the axis.
+            return new FontVariation
+            {
+                BaseFont = system,
+                VariationOpentype = new Godot.Collections.Dictionary
+                {
+                    { TextServerManager.GetPrimaryInterface().NameToTag("weight"), weight },
+                },
+            };
+        }
+    }
+
+    public static void ApplyFont(Control control, FontType fontType, StringName slot)
+        => control.AddThemeFontOverride(slot, fontType == FontType.Bold ? Fonts.Bold : Fonts.Regular);
+
     public static class Spacing
     {
         public const int Xxs = 2;
@@ -59,10 +106,10 @@ internal static class SolverUiTokens
 
     public static class Radius
     {
-        public const int Small = 4;
+        public const int Small = 6;
         public const int Medium = 8;
-        public const int Pill = 6;
-        public const int Large = 12;
+        public const int Pill = 8;
+        public const int Large = 14;
     }
 
     public static class Type
@@ -77,54 +124,60 @@ internal static class SolverUiTokens
     public static class Size
     {
         public const float PanelMargin = 24f;
-        public const float ExpandedMaxWidth = 820f;
-        public const float ExpandedMaxHeight = 440f;
-        public const float ExpandedMinWidth = 560f;
+        public const float ExpandedMaxWidth = 960f;
+        public const float ExpandedMaxHeight = 500f;
+        public const float ExpandedMinWidth = 720f;
+        public const float RailWidth = 288f;
         public const float CollapsedWidth = 520f;
         public const float CollapsedHeight = 120f;
         public const float RouteViewportHeight = 148f;
         public const float RouteViewportHeightWithDetails = 96f;
         public const float RouteRowHeight = 44f;
         public const float ActionPillHeight = 28f;
-        public const float TurnColumnWidth = 88f;
+        public const float TurnColumnWidth = 68f;
         public const float OutcomeColumnWidth = 238f;
         public const float MetricsDamageWidth = 92f;
         public const float MetricsHpWidth = 64f;
         public const float MetricsEnergyWidth = 52f;
         public const float ButtonHeight = 34f;
+        public const float PrimaryButtonHeight = 40f;
         public const float ResizeEdgeThickness = 8f;
         public const int ResizeGripSize = 20;
     }
 
     public static class Palette
     {
-        public static Color Background => Pick("0e1116f2", "f3f3f3ff");
-        public static Color Surface => Pick("171b22f7", "ffffffff");
-        public static Color SurfaceRaised => Pick("1f2530fa", "f7f9fbff");
-        public static Color SurfaceHover => Pick("29303dff", "efefefff");
-        // Dark borders are translucent white so they read as hairlines on every surface level.
-        public static Color Border => Pick("ffffff24", "e0e0e0ff");
-        public static Color BorderSubtle => Pick("ffffff14", "eaeaeaff");
-        public static Color Accent => Pick("6cb4e4ff", "0078d4ff");
-        public static Color AccentHover => Pick("86c4ecff", "106ebeff");
-        public static Color TextPrimary => Pick("edf1f7ff", "1b1b1bff");
-        public static Color TextSecondary => Pick("aab3c2ff", "5f5f5fff");
-        public static Color TextMuted => Pick("7c8597ff", "8a8a8aff");
+        // Flat palette: opaque surfaces for standalone panels, translucent layers for
+        // content that sits on the overlay background so its opacity setting shows through.
+        public static Color Background => Pick("0c0e13ee", "f3f4f6ff");
+        public static Color Surface => Pick("15181fff", "ffffffff");
+        public static Color SurfaceRaised => Pick("1e222bff", "f1f3f6ff");
+        public static Color SurfaceHover => Pick("2a2f3aff", "e7eaefff");
+        public static Color Layer => Pick("ffffff0a", "0000000a");
+        public static Color LayerRaised => Pick("ffffff12", "00000010");
+        public static Color LayerHover => Pick("ffffff1f", "0000001a");
+        public static Color Border => Pick("ffffff1f", "dfe3e8ff");
+        public static Color BorderSubtle => Pick("ffffff12", "e9ecf0ff");
+        public static Color Accent => Pick("4f9dffff", "0078d4ff");
+        public static Color AccentHover => Pick("74b1ffff", "106ebeff");
+        public static Color TextPrimary => Pick("f2f4f8ff", "1b1b1bff");
+        public static Color TextSecondary => Pick("a3abb9ff", "5f5f5fff");
+        public static Color TextMuted => Pick("6f7888ff", "8a8a8aff");
         public static Color TextOutline => Pick("080a0de6", "ffffff00");
-        public static Color Warning => Pick("e0b25cff", "9d5d00ff");
-        public static Color Danger => Pick("ec6f6fff", "c42b1cff");
-        public static Color Success => Pick("6cc287ff", "0f7b0fff");
-        public static Color Positive => Pick("2f7a50ff", "107c10ff");
-        public static Color PositiveHover => Pick("3a9061ff", "0e6e0eff");
+        public static Color Warning => Pick("f5b544ff", "9d5d00ff");
+        public static Color Danger => Pick("ff6b6bff", "c42b1cff");
+        public static Color Success => Pick("4ade80ff", "0f7b0fff");
+        public static Color Positive => Pick("22a35aff", "107c10ff");
+        public static Color PositiveHover => Pick("2bb866ff", "0e6e0eff");
 
-        public static Color Attack => Pick("d96363ff", "c42b1cff");
-        public static Color Skill => Pick("5b91d1ff", "0067c0ff");
-        public static Color Power => Pick("d7a84fff", "9d5d00ff");
-        public static Color Negative => Pick("9b70c9ff", "6b4fa0ff");
-        public static Color Potion => Pick("55b9a5ff", "00786cff");
-        public static Color Choice => Pick("ff8533ff", "d45500ff");
-        public static Color ProgressBackground => IsLightTheme ? Color.FromHtml("e8e8e8ff") : Background;
-        public static Color ProgressFill => IsLightTheme ? Accent : Accent.Darkened(0.12f);
+        public static Color Attack => Pick("ff6b6bff", "c42b1cff");
+        public static Color Skill => Pick("4f9dffff", "0067c0ff");
+        public static Color Power => Pick("f5b544ff", "9d5d00ff");
+        public static Color Negative => Pick("a78bfaff", "6b4fa0ff");
+        public static Color Potion => Pick("2dd4bfff", "00786cff");
+        public static Color Choice => Pick("ff8a3dff", "d45500ff");
+        public static Color ProgressBackground => LayerRaised;
+        public static Color ProgressFill => Accent;
         public static Color CompletedActionModulate => IsLightTheme
             ? new Color(0.66f, 0.68f, 0.72f, 0.55f)
             : new Color(0.54f, 0.58f, 0.66f, 0.52f);
@@ -132,16 +185,16 @@ internal static class SolverUiTokens
             ? new Color(0.45f, 0.72f, 0.98f, 1f)
             : new Color(1f, 0.88f, 0.48f, 1f);
 
-        public static string TextSecondaryHex => IsLightTheme ? "#5f5f5f" : "#aab3c2";
-        public static string TextMutedHex => IsLightTheme ? "#8a8a8a" : "#7c8597";
-        public static string AccentHex => IsLightTheme ? "#0078d4" : "#6cb4e4";
-        public static string WarningHex => IsLightTheme ? "#9d5d00" : "#e0b25c";
-        public static string DangerHex => IsLightTheme ? "#c42b1c" : "#ec6f6f";
-        public static string SuccessHex => IsLightTheme ? "#0f7b0f" : "#6cc287";
+        public static string TextSecondaryHex => IsLightTheme ? "#5f5f5f" : "#a3abb9";
+        public static string TextMutedHex => IsLightTheme ? "#8a8a8a" : "#6f7888";
+        public static string AccentHex => IsLightTheme ? "#0078d4" : "#4f9dff";
+        public static string WarningHex => IsLightTheme ? "#9d5d00" : "#f5b544";
+        public static string DangerHex => IsLightTheme ? "#c42b1c" : "#ff6b6b";
+        public static string SuccessHex => IsLightTheme ? "#0f7b0f" : "#4ade80";
 
         /// <summary>Low-alpha wash of a semantic color, for badges, notices and highlighted rows.</summary>
         public static Color Tint(Color tone, float strength = 1f)
-            => new(tone, (IsLightTheme ? 0.10f : 0.14f) * strength);
+            => new(tone, (IsLightTheme ? 0.10f : 0.16f) * strength);
 
         private static Color Pick(string dark, string light)
             => Color.FromHtml(IsLightTheme ? light : dark);
@@ -156,6 +209,10 @@ internal static class SolverUiTokens
         int borderWidth = 1,
         bool shadow = false)
     {
+        // Flat style: neutral hairlines are dropped and layers separate by fill alone;
+        // only semantic outlines (accent focus, tones) are still drawn.
+        if (border == Palette.Border || border == Palette.BorderSubtle)
+            borderWidth = 0;
         return new StyleBoxFlat
         {
             BgColor = background,
@@ -199,7 +256,7 @@ internal static class SolverUiTokens
         label.AddThemeFontSizeOverride("font_size", fontSize);
         label.AddThemeColorOverride("font_color", color);
         ApplyTextOutline(label, outlineSize, outlineColor);
-        label.ApplyLocaleFontSubstitution(fontType, "font");
+        ApplyFont(label, fontType, "font");
         return label;
     }
 
@@ -224,9 +281,9 @@ internal static class SolverUiTokens
         label.AddThemeFontSizeOverride("mono_font_size", fontSize);
         label.AddThemeColorOverride("default_color", Palette.TextPrimary);
         ApplyTextOutline(label, outlineSize, outlineColor);
-        label.ApplyLocaleFontSubstitution(FontType.Bold, "normal_font");
-        label.ApplyLocaleFontSubstitution(FontType.Bold, "bold_font");
-        label.ApplyLocaleFontSubstitution(FontType.Italic, "italics_font");
+        ApplyFont(label, FontType.Regular, "normal_font");
+        ApplyFont(label, FontType.Bold, "bold_font");
+        ApplyFont(label, FontType.Italic, "italics_font");
         return label;
     }
 
@@ -255,105 +312,54 @@ internal static class SolverUiTokens
         const int hPad = Spacing.Sm;
         const int vPad = Spacing.Xs;
 
-        if (!IsLightTheme)
-        {
-            (Color darkBackground, Color darkBorder, Color darkHover, Color darkPressed) = style switch
-            {
-                SolverButtonStyle.Primary => (
-                    Palette.Accent.Darkened(0.12f),
-                    Palette.Accent.Lightened(0.08f),
-                    Palette.AccentHover,
-                    Palette.Accent.Darkened(0.24f)),
-                SolverButtonStyle.Positive => (
-                    Palette.Positive,
-                    Palette.Success,
-                    Palette.PositiveHover,
-                    Palette.Positive.Darkened(0.18f)),
-                SolverButtonStyle.Danger => (
-                    Palette.Danger.Darkened(0.22f),
-                    Palette.Danger,
-                    Palette.Danger.Lightened(0.08f),
-                    Palette.Danger.Darkened(0.32f)),
-                SolverButtonStyle.Ghost => (
-                    Godot.Colors.Transparent,
-                    Godot.Colors.Transparent,
-                    Palette.SurfaceHover,
-                    Palette.SurfaceRaised),
-                _ => (
-                    Palette.SurfaceRaised,
-                    Palette.Border,
-                    Palette.SurfaceHover,
-                    Palette.Surface),
-            };
-
-            button.AddThemeStyleboxOverride("normal", CreateBox(
-                darkBackground, darkBorder, radius, hPad, vPad));
-            button.AddThemeStyleboxOverride("hover", CreateBox(
-                darkHover, style == SolverButtonStyle.Ghost ? Palette.Border : darkBorder.Lightened(0.12f),
-                radius, hPad, vPad));
-            button.AddThemeStyleboxOverride("pressed", CreateBox(
-                darkPressed, darkBorder, radius, hPad, vPad));
-            button.AddThemeStyleboxOverride("disabled", CreateBox(
-                style == SolverButtonStyle.Ghost ? Godot.Colors.Transparent : Palette.Background,
-                Palette.BorderSubtle, radius, hPad, vPad));
-            button.AddThemeStyleboxOverride("focus", CreateBox(
-                darkHover, Palette.Accent, radius, hPad, vPad));
-            button.AddThemeColorOverride("font_color", Palette.TextPrimary);
-            button.AddThemeColorOverride("font_hover_color", Godot.Colors.White);
-            button.AddThemeColorOverride("font_pressed_color", Godot.Colors.White);
-            button.AddThemeColorOverride("font_disabled_color", Palette.TextMuted);
-            ApplyButtonFont(button);
-            return;
-        }
-
-        (Color background, Color border, Color hover, Color pressed, Color font) = style switch
+        // Flat buttons: solid fills, no outlines; hover lightens and press darkens the same fill.
+        (Color background, Color hover, Color pressed, Color font) = style switch
         {
             SolverButtonStyle.Primary => (
                 Palette.Accent,
-                Palette.Accent,
                 Palette.AccentHover,
-                Palette.Accent.Darkened(0.22f),
+                Palette.Accent.Darkened(0.18f),
                 Godot.Colors.White),
             SolverButtonStyle.Positive => (
-                Palette.Positive,
                 Palette.Positive,
                 Palette.PositiveHover,
                 Palette.Positive.Darkened(0.18f),
                 Godot.Colors.White),
             SolverButtonStyle.Danger => (
-                Palette.Danger,
-                Palette.Danger,
-                Palette.Danger.Lightened(0.08f),
-                Palette.Danger.Darkened(0.18f),
+                IsLightTheme ? Palette.Danger : Palette.Danger.Darkened(0.28f),
+                IsLightTheme ? Palette.Danger.Lightened(0.08f) : Palette.Danger.Darkened(0.16f),
+                Palette.Danger.Darkened(0.38f),
                 Godot.Colors.White),
             SolverButtonStyle.Ghost => (
                 Godot.Colors.Transparent,
-                Godot.Colors.Transparent,
-                Palette.SurfaceHover,
-                Palette.BorderSubtle,
-                Palette.TextPrimary),
+                Palette.LayerHover,
+                Palette.LayerRaised,
+                Palette.TextSecondary),
             _ => (
-                Palette.Surface,
-                Palette.Border,
-                Palette.SurfaceHover,
-                Palette.BorderSubtle,
+                Palette.LayerRaised,
+                Palette.LayerHover,
+                Palette.Layer,
                 Palette.TextPrimary),
         };
-        button.AddThemeStyleboxOverride("normal", CreateBox(background, border, radius, hPad, vPad));
-        button.AddThemeStyleboxOverride("hover", CreateBox(hover, border.Darkened(0.12f), radius, hPad, vPad));
-        button.AddThemeStyleboxOverride("pressed", CreateBox(pressed, border, radius, hPad, vPad));
-        button.AddThemeStyleboxOverride("disabled", CreateBox(Palette.Background, Palette.BorderSubtle, radius, hPad, vPad));
-        button.AddThemeStyleboxOverride("focus", CreateBox(hover, Palette.Accent, radius, hPad, vPad));
+        Color hoverFont = style == SolverButtonStyle.Ghost ? Palette.TextPrimary : font;
+        button.AddThemeStyleboxOverride("normal", CreateBox(background, Godot.Colors.Transparent, radius, hPad, vPad, 0));
+        button.AddThemeStyleboxOverride("hover", CreateBox(hover, Godot.Colors.Transparent, radius, hPad, vPad, 0));
+        button.AddThemeStyleboxOverride("pressed", CreateBox(pressed, Godot.Colors.Transparent, radius, hPad, vPad, 0));
+        button.AddThemeStyleboxOverride("disabled", CreateBox(
+            style == SolverButtonStyle.Ghost ? Godot.Colors.Transparent : Palette.Layer,
+            Godot.Colors.Transparent, radius, hPad, vPad, 0));
+        button.AddThemeStyleboxOverride("focus", new StyleBoxEmpty());
         button.AddThemeColorOverride("font_color", font);
-        button.AddThemeColorOverride("font_hover_color", font);
-        button.AddThemeColorOverride("font_pressed_color", font);
+        button.AddThemeColorOverride("font_hover_color", hoverFont);
+        button.AddThemeColorOverride("font_pressed_color", hoverFont);
+        button.AddThemeColorOverride("font_hover_pressed_color", hoverFont);
         button.AddThemeColorOverride("font_disabled_color", Palette.TextMuted);
         ApplyButtonFont(button);
     }
 
     private static void ApplyButtonFont(Button button)
     {
-        button.ApplyLocaleFontSubstitution(FontType.Bold, "font");
+        ApplyFont(button, FontType.Bold, "font");
     }
 
     internal static void StyleStrategyPanel(Control root)
@@ -374,11 +380,11 @@ internal static class SolverUiTokens
             ApplyTextOutline(control, 0);
             if (control is LineEdit)
             {
-                control.ApplyLocaleFontSubstitution(FontType.Regular, "font");
+                ApplyFont(control, FontType.Regular, "font");
             }
             else
             {
-                control.ApplyLocaleFontSubstitution(FontType.Bold, "font");
+                ApplyFont(control, FontType.Bold, "font");
             }
         }
         foreach (Node child in root.GetChildren()) StyleStrategyText(child);

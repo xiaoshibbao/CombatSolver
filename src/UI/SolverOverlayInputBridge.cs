@@ -24,8 +24,7 @@ internal sealed partial class SolverOverlayInputBridge : Node
                 ShiftPressed: false,
                 MetaPressed: false,
                 Keycode: Key.F9,
-            }
-            || BugReportUploadDialog.IsOpen)
+            })
         {
             return false;
         }

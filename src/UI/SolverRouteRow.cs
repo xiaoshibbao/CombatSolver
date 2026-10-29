@@ -15,6 +15,7 @@ internal sealed partial class SolverRouteRow : PanelContainer
     private string? _populatedLanguage;
 
     public Label TurnLabel { get; }
+    private readonly HBoxContainer _outcomeLayout;
     public SolverRouteActionFlow ActionFlow { get; }
     public Label EnemyDamageLabel { get; }
     public Label OutcomeLabel { get; }
@@ -28,12 +29,12 @@ internal sealed partial class SolverRouteRow : PanelContainer
         MouseFilter = MouseFilterEnum.Ignore;
         // The current turn gets an accent wash; later turns sit flat on the surface without outlines.
         AddThemeStyleboxOverride("panel", SolverUiTokens.CreateBox(
-            index == 0 ? SolverUiTokens.Palette.Tint(SolverUiTokens.Palette.Accent, 0.8f) : SolverUiTokens.Palette.Surface,
-            index == 0 ? new Color(SolverUiTokens.Palette.Accent, 0.30f) : Godot.Colors.Transparent,
+            index == 0 ? SolverUiTokens.Palette.Tint(SolverUiTokens.Palette.Accent, 0.8f) : SolverUiTokens.Palette.Layer,
+            Godot.Colors.Transparent,
             SolverUiTokens.Radius.Medium,
             SolverUiTokens.Spacing.Sm,
             SolverUiTokens.Spacing.Sm,
-            borderWidth: index == 0 ? 1 : 0));
+            borderWidth: 0));
 
         HBoxContainer layout = new()
         {
@@ -42,19 +43,12 @@ internal sealed partial class SolverRouteRow : PanelContainer
             SizeFlagsVertical = SizeFlags.ExpandFill,
         };
         layout.AddThemeConstantOverride("separation", SolverUiTokens.Spacing.Sm);
-        layout.AddChild(new ColorRect
-        {
-            Color = index == 0 ? SolverUiTokens.Palette.Accent : Godot.Colors.Transparent,
-            CustomMinimumSize = new Vector2(3, 24),
-            SizeFlagsVertical = SizeFlags.ShrinkCenter,
-            MouseFilter = MouseFilterEnum.Ignore,
-        });
 
         TurnLabel = SolverUiTokens.CreateLabel(
             SolverText.Format($"第 {index + 1} 回合"),
-            SolverUiTokens.Type.Body,
-            index == 0 ? SolverUiTokens.Palette.Accent : SolverUiTokens.Palette.TextPrimary,
-            FontType.Bold);
+            SolverUiTokens.Type.Caption,
+            index == 0 ? SolverUiTokens.Palette.Accent : SolverUiTokens.Palette.TextSecondary,
+            index == 0 ? FontType.Bold : FontType.Regular);
         TurnLabel.CustomMinimumSize = new Vector2(SolverUiTokens.Size.TurnColumnWidth, SolverUiTokens.Size.ActionPillHeight);
         TurnLabel.SizeFlagsHorizontal = SizeFlags.ShrinkBegin;
         TurnLabel.SizeFlagsVertical = SizeFlags.ShrinkCenter;
@@ -72,7 +66,7 @@ internal sealed partial class SolverRouteRow : PanelContainer
         ActionFlow.AddThemeConstantOverride("v_separation", SolverUiTokens.Spacing.Xs);
         layout.AddChild(ActionFlow);
 
-        HBoxContainer outcomeLayout = new()
+        _outcomeLayout = new()
         {
             Alignment = BoxContainer.AlignmentMode.End,
             CustomMinimumSize = new Vector2(
@@ -82,19 +76,19 @@ internal sealed partial class SolverRouteRow : PanelContainer
             SizeFlagsVertical = SizeFlags.ShrinkCenter,
             MouseFilter = MouseFilterEnum.Ignore,
         };
-        outcomeLayout.AddThemeConstantOverride("separation", SolverUiTokens.Spacing.Sm);
+        _outcomeLayout.AddThemeConstantOverride("separation", SolverUiTokens.Spacing.Sm);
         EnemyDamageLabel = SolverUiTokens.CreateLabel(
             string.Empty,
-            SolverUiTokens.Type.Body,
+            SolverUiTokens.Type.Caption,
             SolverUiTokens.Palette.Warning,
-            FontType.Bold);
+            FontType.Regular);
         EnemyDamageLabel.HorizontalAlignment = HorizontalAlignment.Right;
         EnemyDamageLabel.AutowrapMode = TextServer.AutowrapMode.Off;
         EnemyDamageLabel.CustomMinimumSize = new Vector2(
             SolverUiTokens.Size.MetricsDamageWidth,
             SolverUiTokens.Size.ActionPillHeight);
         EnemyDamageLabel.SizeFlagsVertical = SizeFlags.ShrinkCenter;
-        outcomeLayout.AddChild(EnemyDamageLabel);
+        _outcomeLayout.AddChild(EnemyDamageLabel);
         OutcomeLabel = SolverUiTokens.CreateLabel(
             string.Empty,
             SolverUiTokens.Type.Body,
@@ -106,20 +100,20 @@ internal sealed partial class SolverRouteRow : PanelContainer
             SolverUiTokens.Size.MetricsHpWidth,
             SolverUiTokens.Size.ActionPillHeight);
         OutcomeLabel.SizeFlagsVertical = SizeFlags.ShrinkCenter;
-        outcomeLayout.AddChild(OutcomeLabel);
+        _outcomeLayout.AddChild(OutcomeLabel);
         EnergyLabel = SolverUiTokens.CreateLabel(
             string.Empty,
-            SolverUiTokens.Type.Body,
+            SolverUiTokens.Type.Caption,
             SolverUiTokens.Palette.TextSecondary,
-            FontType.Bold);
+            FontType.Regular);
         EnergyLabel.HorizontalAlignment = HorizontalAlignment.Right;
         EnergyLabel.AutowrapMode = TextServer.AutowrapMode.Off;
         EnergyLabel.CustomMinimumSize = new Vector2(
             SolverUiTokens.Size.MetricsEnergyWidth,
             SolverUiTokens.Size.ActionPillHeight);
         EnergyLabel.SizeFlagsVertical = SizeFlags.ShrinkCenter;
-        outcomeLayout.AddChild(EnergyLabel);
-        layout.AddChild(outcomeLayout);
+        _outcomeLayout.AddChild(EnergyLabel);
+        layout.AddChild(_outcomeLayout);
         AddChild(layout);
     }
 
@@ -469,6 +463,9 @@ internal sealed partial class SolverRouteRow : PanelContainer
         ClearActions();
         ActionFlow.AddChild(SolverActionPill.CreateStatus(text, SolverUiTokens.Palette.TextMuted));
     }
+
+    /// <summary>Compact rows give the card order the full width; per-turn metrics stay in the expanded list.</summary>
+    public void SetCompact(bool compact) => _outcomeLayout.Visible = !compact;
 
     public void SetOutcome(
         string text,

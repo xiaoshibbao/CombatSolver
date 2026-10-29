@@ -28,10 +28,12 @@ internal static class CombatShowcaseRuntime
     private static int _showcaseRunActive;
     private static int _returningToMainMenu;
     internal static bool ImportInProgress => Volatile.Read(ref _importing) != 0;
+    // Route bundle format this build can import.
+    internal const int ProtocolVersion = 1;
 
     internal static CombatShowcaseCompatibility GetCompatibility()
         => new(
-            CombatShowcaseCollector.ProtocolVersion,
+            ProtocolVersion,
             typeof(CombatState).Assembly.GetName().Version?.ToString()
                 ?? throw new InvalidDataException("游戏程序集缺少版本号。"),
             typeof(Entry).Assembly.GetName().Version?.ToString(3)

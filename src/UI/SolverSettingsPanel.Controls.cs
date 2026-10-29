@@ -98,7 +98,7 @@ internal sealed partial class SolverSettingsPanel
             "arrow",
             SolverUiTokens.CreateChevronTexture(SolverUiTokens.Palette.TextSecondary));
         SolverUiTokens.ApplyTextOutline(input);
-        input.ApplyLocaleFontSubstitution(FontType.Bold, "font");
+        SolverUiTokens.ApplyFont(input, FontType.Bold, "font");
         return input;
     }
 
@@ -175,7 +175,7 @@ internal sealed partial class SolverSettingsPanel
             SolverUiTokens.Spacing.Sm,
             SolverUiTokens.Spacing.Xs));
         SolverUiTokens.ApplyTextOutline(input);
-        input.ApplyLocaleFontSubstitution(FontType.Regular, "font");
+        SolverUiTokens.ApplyFont(input, FontType.Regular, "font");
         input.TextChanged += _ => input.AddThemeColorOverride(
             "font_color",
             SolverUiTokens.Palette.TextPrimary);

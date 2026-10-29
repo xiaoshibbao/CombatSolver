@@ -12,24 +12,6 @@ internal sealed partial class UnattendedTestRunner
         if (wrappers.GodotObjects <= 0 || wrappers.OtherWrappers <= 0)
             throw new InvalidOperationException("Live Godot registry counters were not available to the background sampler.");
         _completedChecks.Add("ProcessDiagnostics:BackgroundGodotRegistryCounts");
-        var manager = RunManager.Instance;
-        var service = manager.NetService;
-        PropertyInfo property = typeof(RunManager).GetProperty(nameof(RunManager.NetService))!;
-        SolverSettingsData settings = SolverSettings.Current;
-        using OnlinePresence presence = new();
-        try
-        {
-            SolverSettings.ApplyForTesting(settings with { OnlineStatisticsEnabled = true });
-            property.SetValue(manager, null);
-            // Reproduce the real saved-run window: State exists before NetService is installed.
-            presence._Process(1d / 60);
-        }
-        finally
-        {
-            property.SetValue(manager, service);
-            SolverSettings.ApplyForTesting(settings);
-        }
-
         using CombatDiagnosticJournal journal = new(Path.Combine(Path.GetTempPath(), "CombatSolver-process-log-tests"));
         journal.BeginCombat("first", "fixture", "seed");
         journal.Write("info", "[CombatSolver/Test] HEAP_RECLAIM fixture=first");

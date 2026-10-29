@@ -960,14 +960,6 @@ $preCombatApiChecks = @(
         Text = "SolverController.AcceptShowcaseRoute"
     },
     @{
-        Path = Join-Path $repositoryRoot "src\Runtime\CombatShowcaseCollector.cs"
-        Text = "CombatShowcaseCollector.FlushPendingAsync"
-    },
-    @{
-        Path = Join-Path $repositoryRoot "src\Runtime\CombatShowcaseModEligibility.cs"
-        Text = "FindGameplayModificationNames"
-    },
-    @{
         Path = Join-Path $repositoryRoot "src\Api\PreCombatLiveStateSnapshot.cs"
         Text = "RunManager.Instance.ToSave(null)"
     },
@@ -1868,11 +1860,9 @@ foreach ($rendererPath in $overlayRendererPaths) {
 
 $bugReportExporterPath = Join-Path $repositoryRoot "src\Runtime\CombatBugReportExporter.cs"
 $diagnosticJournalPath = Join-Path $repositoryRoot "src\Runtime\CombatDiagnosticJournal.cs"
-$bugReportUploaderPath = Join-Path $repositoryRoot "src\Runtime\CombatBugReportUploader.cs"
 $solverSettingsPanelPath = Join-Path $repositoryRoot "src\UI\SolverSettingsPanel.cs"
 $solverSettingsGeneralPath = Join-Path $repositoryRoot "src\UI\SolverSettingsPanel.General.cs"
 $solverSettingsPerformancePath = Join-Path $repositoryRoot "src\UI\SolverSettingsPanel.Performance.cs"
-$solverSettingsBugReportsPath = Join-Path $repositoryRoot "src\UI\SolverSettingsPanel.BugReports.cs"
 $solverSettingsControlsPath = Join-Path $repositoryRoot "src\UI\SolverSettingsPanel.Controls.cs"
 foreach ($check in @(
     @{ Path = $diagnosticJournalPath; Text = "AppendOnlyEventLog<CombatLogEntry>" },
@@ -1883,25 +1873,10 @@ foreach ($check in @(
     @{ Path = $bugReportExporterPath; Text = "QueueCheckpointWrite(session, capture);" },
     @{ Path = $bugReportExporterPath; Text = "Task<ForensicArchiveBundle> forensicsTask = QueueBackground(" },
     @{ Path = $bugReportExporterPath; Text = "ForensicArchiveBundle forensics = await forensicsTask.ConfigureAwait(false);" },
-    @{ Path = $bugReportExporterPath; Text = "CombatBugReportMetadata.CaptureCombat" },
-    @{ Path = $bugReportUploaderPath; Text = "ReadMetadata(zipPath, submissionId, description)" },
-    @{ Path = $bugReportUploaderPath; Text = "AllowAutoRedirect = false" },
-    @{ Path = $bugReportUploaderPath; Text = "IProgress<CombatBugReportUploadProgress>" },
-    @{ Path = $bugReportUploaderPath; Text = "HttpCompletionOption.ResponseHeadersRead" },
-    @{ Path = $bugReportUploaderPath; Text = "CancellationToken requestCancellationToken" },
-    @{ Path = $bugReportUploaderPath; Text = "ReadServerReceipt(body)" },
-    @{ Path = $bugReportUploaderPath; Text = "UseProxy = false" },
-    @{ Path = $solverSettingsBugReportsPath; Text = "private ProgressBar _uploadProgress = null!;" },
-    @{ Path = $solverSettingsBugReportsPath; Text = "private volatile bool _uploadInProgress;" },
-    @{ Path = $solverSettingsBugReportsPath; Text = "Interlocked.Exchange(ref _uploadCompletion, completion)" },
-    @{ Path = $solverSettingsBugReportsPath; Text = "TryApplyUploadCompletion()" },
-    @{ Path = $solverSettingsBugReportsPath; Text = "等待服务器确认" })) {
+    @{ Path = $bugReportExporterPath; Text = "CombatBugReportMetadata.CaptureCombat" })) {
     if (-not (Select-String -LiteralPath $check.Path -SimpleMatch $check.Text -Quiet)) {
         $violations.Add("$($check.Path): missing bug-report ownership boundary '$($check.Text)'")
     }
-}
-if (Select-String -LiteralPath $bugReportUploaderPath -SimpleMatch "using Godot" -Quiet) {
-    $violations.Add("${bugReportUploaderPath}: uploader must not own Godot UI state")
 }
 foreach ($legacyLogRead in @("AddFileTail(", "CaptureLogStarts(", '"*.log"')) {
     if (Select-String -LiteralPath $bugReportExporterPath -SimpleMatch $legacyLogRead -Quiet) {
@@ -1931,7 +1906,6 @@ foreach ($check in @(
     @{ Path = $solverSettingsGeneralPath; Text = "CreateGeneralPage()" },
     @{ Path = $solverSettingsPerformancePath; Text = "CreatePerformancePage()" },
     @{ Path = $solverSettingsPerformancePath; Text = "SetAdvancedParametersExpanded" },
-    @{ Path = $solverSettingsBugReportsPath; Text = "CreateBugReportsPage()" },
     @{ Path = $solverSettingsControlsPath; Text = "CreatePageScroll(Control content)" })) {
     if (-not (Select-String -LiteralPath $check.Path -SimpleMatch $check.Text -Quiet)) {
         $violations.Add("$($check.Path): missing settings panel ownership boundary '$($check.Text)'")

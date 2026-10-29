@@ -659,13 +659,10 @@ internal sealed partial class UnattendedTestRunner
                         parallelSearchWasEnabled: true);
                     string details = SolverOverlaySnapshot.Capture(first, unexpectedReplan: true).DetailsText;
                     if (!SolverController.ManualRouteImprovementDetected
-                        || SolverController.BugReportUploadRecommended
-                        || SolverOverlay.ManualRouteImprovementVisibleForTesting
-                        || SolverOverlay.UnexpectedReplanWarningVisibleForTesting
-                        || setupFailure.Contains(SolverUiTokens.BugReportUploadInstruction,
+                        || setupFailure.Contains("上传问题包",
                             StringComparison.Ordinal)
                         || searchFailure.Contains("上传问题包", StringComparison.Ordinal)
-                        || details.Contains(SolverUiTokens.BugReportUploadInstruction,
+                        || details.Contains("上传问题包",
                             StringComparison.Ordinal))
                         throw new InvalidOperationException("Multiplayer displayed an improvement or log-upload prompt.");
                     var end = new EndPlayerTurnAction(scenario.Player, 1);
@@ -2071,6 +2068,52 @@ internal sealed partial class UnattendedTestRunner
                 combat.Players[input.ContentTargetSeat].Creature, input.ContentTargetBlock);
             UnattendedTestRunner.SetEnergy(actor, input.ContentActorEnergy);
             UnattendedTestRunner.SetStars(actor, input.VerifyStarSupport ? 0 : 5);
+            if (input.VerifyTurnFinalization)
+            {
+                if (!input.IsVirtual || input.PlayerCount != 2)
+                    throw new InvalidOperationException("Turn finalization fixture requires virtual two-player combat.");
+                CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
+                SearchPolicySnapshot policy = SolverController.CaptureSearchPolicy(
+                    SolverSettings.Capture(), combat, false, null);
+                policy = policy with { Profile = policy.Profile with { SoftTimeBudgetMilliseconds = 0 } };
+                CombatBeamSolver driver = new(root, SolverDisplayNames.Capture(combat),
+                    BattleDamageTracker.Observe(combat), policy, searchProfile: policy.Profile);
+                var finalized = driver.VerifyTurnFinalizationForTesting();
+                string[] plays = finalized.Actions.Where(action => action.IsExecutable)
+                    .Select(action => action.CardId).ToArray();
+                if (!plays.Contains("STRIKE_IRONCLAD") || !plays.Contains("DEFEND_IRONCLAD")
+                    || !plays.Contains("BLAZE") || plays.Contains("TUTOR") || plays.Contains("LARGESSE")
+                    || finalized.Actions.Last().Kind != PlanActionKind.EndTurn)
+                    throw new InvalidOperationException("Expired-budget finalization lost safe actions or crossed RNG/choice boundaries: "
+                        + string.Join(',', plays));
+                foreach (PlanAction action in finalized.Actions)
+                {
+                    if (action.Kind == PlanActionKind.EndTurn)
+                    {
+                        var end = new EndPlayerTurnAction(actor, 1);
+                        RunManager.Instance.ActionQueueSynchronizer.RequestEnqueue(end);
+                        await end.CompletionTask;
+                    }
+                    else
+                    {
+                        string before = ContinuationStamp.CaptureLive(combat).RngStateText;
+                        CardModel card = actor.PlayerCombatState!.Hand.Cards.Single(card => card.Id.Entry == action.CardId);
+                        var play = new PlayCardAction(card, combat.GetCreature(action.TargetCombatId));
+                        RunManager.Instance.ActionQueueSynchronizer.RequestEnqueue(play);
+                        await play.CompletionTask;
+                        if (before != ContinuationStamp.CaptureLive(combat).RngStateText)
+                            throw new InvalidOperationException("A deterministic tail action advanced live RNG.");
+                    }
+                }
+                await runner.WaitForMultiplayerProbeAsync(() => combat.Players.All(member =>
+                    member.PlayerCombatState is { Phase: PlayerTurnPhase.Play, TurnNumber: 2 }));
+                ContinuationStamp actual = ContinuationStamp.CaptureLive(combat);
+                if (finalized.State != actual)
+                    throw new InvalidOperationException("Finalized turn differs from native combat: "
+                        + finalized.State.DescribeFirstDifference(actual));
+                runner._completedChecks.Add("MultiplayerFinalization:ExpiredBudget:Attack:Block:AllySupport:NoRng:NoRemoteChoice:NativeEnd:FullState");
+                return new ExecutionOutcome(false, 2, true, true, true, false);
+            }
             if (input.VerifyMidnightExhaustHistory)
             {
                 Midnight midnight = actor.PlayerCombatState!.Hand.Cards.OfType<Midnight>().Single();

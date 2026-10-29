@@ -8,6 +8,18 @@
 
 ## 下一版本（开发中）
 
+### Claude 中断任务续作：离线界面与回合完成
+
+保留此前的扁平布局、统一字体、背景透明度和收起显示本回合牌序。删除反馈页、上传对话框、在线状态/战绩/录像自动上报和更新提醒及其构建连接元数据；清理调用方、退役测试与工具。大战损性能/多策略重试横幅一起移除，本地诊断导出、回放与录像导入保留。
+
+稳定的推荐前缀缺少 EndTurn 时先在模拟中补齐；不跨挂起选择或未知语义。尾部最多补16张有验证收益的确定性牌，要求不推进 RNG、不减 HP/永久资源，完整余下路线重放不退化。随机支援仍遵守原预算，队友选牌不在超时后追加。执行重新搜索保留当前执行意图；提交 EndTurn 前排空队列，按本地 OwnerId 捕获实际动作并等待 CompletionTask，不再提前显示完成。
+
+本轮 Release 构建0警告、0错误；两平台结构门禁、工具与文档检查通过。`MULTIPLAYER-CONTENT` 的 `verifyTurnFinalization` 以0毫秒策略覆盖补攻击/格挡/支援、拒绝随机/队友选择和原生回合全状态/RNG差分，通过 run `39af201951f4489993381d212131dffe`（`.local/resume-claude/tail/peer-0/result.json`）。最初能量3无法支付 Blaze 的夹具失败保留，改为10后通过。
+
+真实双端 ENet 全自动连续两回合并进入第三回合，全状态/RNG一致，证据目录 `.local/multiplayer-p0/enet-2-4168c08549024fc592f5a2a6addf9776`。单人 `PAELS-EYE-AUTOPOST-ORDER` 原生/Fork全状态通过 run `9583da7f834349218727a4f5a8be1c47`。测试实例均按所有权清理。
+
+`UI-LOCALIZATION` run `007f4c7900bf4b0da6453fe44c60b733` 已通过离线程序集合同、卡牌语言往返，以及英/简中/繁中收起当前牌序可见、未来回合隐藏、展开复用同一行合同。但整套场景仍 Failed：后续旧 Wriggler 生成夹具在 `BranchMonsterStaticSnapshot.Capture` 抛出 `No valid next state found`，默认与 BYGONE_EFFIGY_ELITE 遭遇均复现，未绕过异常或改动怪物引擎。证据 `.local/resume-claude/ui-compact/result.json`；其余界面合同未完成，未做 Steam 公网或可见布局性能验收。
+
 ### 覆盖层 UI 更新（2026-10-29）
 
 合入 Claude 的界面改动：调整深色配色、细边框、阴影和圆角，标题栏使用轻量按钮，当前回合、状态徽章和通知采用语义色底，动作胶囊及后续回合行同步更新。改动限于现有 UI 样式和布局，不增加玩家文案。Release 构建通过（零警告、零错误）；未重新进行可见游戏布局验收。

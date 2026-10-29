@@ -221,7 +221,7 @@ internal sealed partial class UnattendedTestRunner
                 ledger.RecordFailure(CombatBugReportIssueKind.SearchFailure, new InvalidOperationException("wrapper", failure));
                 if (failure is IncompatibleGameplayModException || !ledger.RequiresPlayerUpload
                     || !SolverController.FormatSearchFailureForTesting(failure, false)
-                        .Contains(SolverUiTokens.BugReportUploadInstruction, StringComparison.Ordinal))
+                        .Contains("上传问题包", StringComparison.Ordinal))
                     throw new InvalidOperationException("Native or runtime failure must retain its diagnostic upload prompt.");
                 if (failure is PlatformNotSupportedException
                     && ledger.Snapshot().Any(issue => issue.Kind == CombatBugReportIssueKind.UnsupportedCombatSemantic))
@@ -234,7 +234,6 @@ internal sealed partial class UnattendedTestRunner
             LocManager.Instance.SetLanguage(previousLanguage);
             AssemblyInfo.MockTypes = previousMocks;
         }
-        AssertUploadGuidance(combat, player);
     }
 
     private static void AssertContentFailurePresentation(IncompatibleGameplayModException failure)
@@ -252,7 +251,7 @@ internal sealed partial class UnattendedTestRunner
                 SolverController.FormatSearchFailureForTesting(wrapped, true),
             })
                 if (!text.Contains(expected, StringComparison.Ordinal)
-                    || text.Contains(SolverUiTokens.BugReportUploadInstruction, StringComparison.Ordinal)
+                    || text.Contains("上传问题包", StringComparison.Ordinal)
                     || text.Contains(SolverUiTokens.ParallelSearchFailureInstruction, StringComparison.Ordinal)
                     || text.Contains(failure.Subject, StringComparison.Ordinal))
                     throw new InvalidOperationException($"Content mod prompt is incorrect: {language}.");

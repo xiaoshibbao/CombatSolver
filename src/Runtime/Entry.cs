@@ -55,7 +55,7 @@ public static class Entry
         SolverUiTokens.ConfigureTheme(SolverSettings.Current.OverlayTheme);
         SolverController.ApplyPersistentSettings(SolverSettings.Capture());
         ModTypeDiscoveryHub.RegisterModAssembly(ModId, Assembly.GetExecutingAssembly());
-        RitsuLibFramework.SubscribeLifecycle<CombatStartingEvent>(evt => { RunStatistics.Battle(evt.CombatState); SolverController.BeginCombat(evt.CombatState); });
+        RitsuLibFramework.SubscribeLifecycle<CombatStartingEvent>(evt => SolverController.BeginCombat(evt.CombatState));
         RitsuLibFramework.SubscribeLifecycle<CombatEndedEvent>(_ => SolverController.Reset("combat_ended"));
         // 模组类型的 ModelId 在注册冻结前还会被内容库改写，GetId 缓存要等注册表初始化完成才收模组类型。
         RitsuLibFramework.SubscribeLifecycle<ModelRegistryInitializedEvent>(
@@ -100,9 +100,6 @@ public static class Entry
         patcher.RegisterPatch<UnattendedTestIsolationPatch>();
         patcher.RegisterPatch<UnattendedHeadlessFtuePatch>();
         patcher.RegisterPatch<CombatReplayRecordingPatch>();
-        patcher.RegisterPatch<RunStatisticsNewRunPatch>();
-        patcher.RegisterPatch<RunStatisticsLaunchPatch>();
-        patcher.RegisterPatch<RunStatisticsEndPatch>();
         patcher.RegisterPatch<UnattendedCombatStartReplayPatch>();
         patcher.RegisterPatch<CombatShowcaseSaveIsolationPatch>();
         patcher.RegisterPatch<CombatShowcaseCleanupPatch>();
@@ -120,7 +117,6 @@ public static class Entry
             if (host != null)
             {
                 SolverDispatcher.Ensure(host);
-                host.AddChild(new CombatShowcaseUploadNode());
                 host.TreeExiting += PreCombatForecastWorker.StopSessionAtProcessExit;
                 host.TreeExiting += Logger.Journal.Dispose;
             }

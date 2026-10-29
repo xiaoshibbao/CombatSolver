@@ -107,18 +107,6 @@ internal sealed partial class UnattendedTestRunner
                 runner.AssertJossPaperDeferredFork(combatState, player);
                 return Observation(combatEnded: false);
             }
-            if (request.ScenarioId == "RUN-STATISTICS-SATURATION")
-            {
-                await RunStatistics.AssertHealthySaturationIsolationAsync(request.EvidenceDirectory
-                    ?? throw new InvalidOperationException("Statistics checks require an evidence directory."));
-                return Observation(combatEnded: false);
-            }
-            if (request.ScenarioId == "RUN-STATISTICS-WORKER-FAILURE")
-            {
-                await RunStatistics.AssertWorkerFailureIsolationAsync(request.EvidenceDirectory
-                    ?? throw new InvalidOperationException("Statistics fixture requires an evidence directory."));
-                return Observation(combatEnded: false);
-            }
             if (request.ScenarioId == "REMAINING-HEALING-DEFECT-PLAYER-PRISM")
             {
                 runner.SetStage("remaining_healing_defect_player_prism");
@@ -601,49 +589,12 @@ internal sealed partial class UnattendedTestRunner
             }
             if (request.ScenarioId == "UI-LOCALIZATION")
             {
-                RunStatistics.Start(MegaCrit.Sts2.Core.Nodes.NGame.Instance!);
-                if (MegaCrit.Sts2.Core.Nodes.NGame.Instance!.GetNodeOrNull("CombatSolverRunStatistics") != null)
-                    throw new InvalidOperationException("Headless statistics must remain inactive.");
                 await runner.AssertUiLocalizationAsync(combatState);
                 return Observation(combatEnded: false);
             }
             if (request.ScenarioId == "COMBAT-DIAGNOSTIC-LOG")
             {
                 await runner.AssertCombatDiagnosticLogAsync(combatState, player);
-                return Observation(combatEnded: false);
-            }
-            if (request.ScenarioId == "REPORT-V2-CONTRACT")
-            {
-                await runner.AssertBugReportUploadBoundariesAsync();
-                string reportId = Guid.NewGuid().ToString("N");
-                string archivePath = await CombatBugReportExporter.ExportCurrentAsync(
-                    playerDescription: "结构化问题包验证", submissionId: reportId);
-                using (ZipArchive archive = ZipFile.OpenRead(archivePath))
-                    AssertBugReportArchive(archive, "current", "solver_only");
-                string metadata = CombatBugReportUploader.ReadMetadata(archivePath, reportId, "结构化问题包验证");
-                using var document = System.Text.Json.JsonDocument.Parse(metadata);
-                var combat = document.RootElement.GetProperty("combat");
-                if (combat.GetProperty("encounterId").GetString() != combatState.Encounter!.Id.Entry
-                    || combat.GetProperty("characterId").GetString() != player.Character.Id.Entry
-                    || combat.GetProperty("monsters").GetArrayLength() == 0
-                    || document.RootElement.GetProperty("hpLoss").ValueKind != System.Text.Json.JsonValueKind.Null)
-                    throw new InvalidDataException("结构化问题包身份或未知战损不正确。");
-                foreach (int after in new[] { 3, 10, 14 })
-                {
-                    using var compared = System.Text.Json.JsonDocument.Parse(CombatBugReportMetadata.Serialize(
-                        reportId, string.Empty, null, new CombatBugReportClassificationSnapshot(0, 0, 0, 0, 0, []),
-                        new ManualProjectionComparison(1, 2, 10, after, 0, 1, "test")));
-                    if (compared.RootElement.GetProperty("hpLoss").GetProperty("reduction").GetInt32() != 10 - after)
-                        throw new InvalidDataException("战损下降值的符号不正确。");
-                    if (compared.RootElement.GetProperty("hpLoss").GetProperty("additionalPotionCount").GetInt32() != 1
-                        || compared.RootElement.GetProperty("hpLoss").GetProperty("potionAdjustedHpReduction").GetInt32() != 1 - after)
-                        throw new InvalidDataException("问题包未保存新增用药与折算战损。");
-                }
-                runner._completedChecks.Add($"ReportV2UploadAndArchive:{archivePath}");
-                CombatBugReportUploadReceipt receipt = await CombatBugReportUploader.UploadAsync(
-                    archivePath, "结构化问题包验证", string.Empty, reportId);
-                if (receipt.ReportId != reportId) throw new InvalidDataException("V2 服务端未确认问题包身份。");
-                runner._completedChecks.Add($"ReportV2ProductionTlsUpload:{reportId}");
                 return Observation(combatEnded: false);
             }
             if (request.ScenarioId == "SUMMON-DEATH-POWER-ORDER")
@@ -690,29 +641,6 @@ internal sealed partial class UnattendedTestRunner
                 PerformanceRecording.VerifyHostReattachmentForTesting();
                 await Task.Delay(TimeSpan.FromSeconds(15));
                 runner._completedChecks.Add("PerformanceObserverReattachmentKeepsProcessRecorder");
-                return Observation(combatEnded: false);
-            }
-            if (request.ScenarioId == "ONLINE-PRESENCE-CONTRACT")
-            {
-                if (!OnlinePresence.IsHeadless()) throw new InvalidOperationException("Presence fixture requires headless isolation.");
-                if (!new SolverSettingsData().OnlineStatisticsEnabled
-                    || SolverSettings.RoundTripForTesting(new SolverSettingsData { OnlineStatisticsEnabled = false }).OnlineStatisticsEnabled)
-                    throw new InvalidOperationException("Presence opt-out did not persist.");
-                OnlinePresencePayload payload = OnlinePresence.Capture("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "test");
-                if (payload.Floor != combatState.RunState.TotalFloor || payload.Character.Length == 0 || payload.Encounter.Length == 0 || payload.HpLoss != null)
-                    throw new InvalidOperationException("Presence scalar snapshot differs from the current combat.");
-                OnlinePresencePayload complete = payload with { HpLoss = 0, BattleUpdatedAt = 123 };
-                OnlinePresencePayload idle = payload with { Character = "", Floor = null, Encounter = "", InCombat = false, InRun = false };
-                OnlinePresencePayload cached = OnlinePresence.RetainLatestBattle(idle, complete);
-                if (!payload.InRun || cached.InRun || cached.HpLoss != 0 || cached.Encounter != complete.Encounter || cached.Floor != complete.Floor || cached.InCombat || cached.BattleUpdatedAt != 123)
-                    throw new InvalidOperationException("Presence lost the completed battle while idle.");
-                OnlinePresencePayload next = payload with { Character = "next", Floor = payload.Floor + 1, Encounter = "next" };
-                if (OnlinePresence.RetainLatestBattle(next, cached) != cached with { InCombat = true, InRun = true }
-                    || OnlinePresence.RetainLatestBattle(next with { HpLoss = 3 }, cached) != next with { HpLoss = 3 }
-                    || OnlinePresence.RetainLatestBattle(next, null).Encounter.Length != 0)
-                    throw new InvalidOperationException("Presence mixed battles or fabricated an initial result.");
-                await OnlinePresence.VerifyTransportForTestingAsync();
-                runner._completedChecks.Add("PresenceDefaultOptOutSnapshotTlsAndInvalidPinRejection");
                 return Observation(combatEnded: false);
             }
             if (request.ScenarioId == "PR60-65-CONTRACT")
@@ -1786,11 +1714,6 @@ internal sealed partial class UnattendedTestRunner
                     && request.ExpectedUnexpectedReplansAtLeast is { } minimumUnexpectedReplans
                     && maximumUnexpectedReplans >= minimumUnexpectedReplans)
                 {
-                    if (request.ExpectedUnexpectedReplanWarning
-                        && !SolverOverlay.UnexpectedReplanWarningVisibleForTesting)
-                    {
-                        throw new InvalidOperationException("已发生计划外重算，但标题右侧没有显示反馈告警。");
-                    }
                     if (request.ExportBugReportAfterUnexpectedReplan)
                     {
                         string directory = ProjectSettings.GlobalizePath("user://combat-solver-test-bug-reports");
@@ -1933,13 +1856,6 @@ internal sealed partial class UnattendedTestRunner
             {
                 throw new InvalidOperationException(
                     $"战斗只出现 {maximumUnexpectedReplans} 次非预期重算，低于预期下限 {minimumReplans}。");
-            }
-            if (request.ExpectedUnexpectedReplanWarning
-                && maximumUnexpectedReplans > 0
-                && !stoppedAfterExpectedUnexpectedReplan
-                && !SolverOverlay.UnexpectedReplanWarningVisibleForTesting)
-            {
-                throw new InvalidOperationException("已发生计划外重算，但标题右侧没有显示反馈告警。");
             }
 
             if (!stoppedAfterExpectedReuse

@@ -102,8 +102,6 @@ internal sealed partial class UnattendedTestRunner
         SolverOverlay.ShowManualCalculationReady(NGame.Instance!, false);
         if (!SolverOverlay.ExercisePerformancePresetPersistenceForTesting())
             throw new InvalidOperationException("0.24.3 性能迁移或预设/内存独立持久化失败。");
-        if (!SolverOverlay.ExercisePerformanceHintForTesting())
-            throw new InvalidOperationException("大战损性能提示没有遵守 8 HP 触发阈值。");
         SolverSettingsSnapshot portfolioSettings = SolverSettings.Capture();
         SearchPolicySnapshot portfolioEnabled = SolverController.CaptureSearchPolicy(
             portfolioSettings with
@@ -369,8 +367,6 @@ internal sealed partial class UnattendedTestRunner
         }
         if (!SolverOverlay.MessageWrappingEnabledForTesting)
             throw new InvalidOperationException("求解器消息区域没有启用自动换行。");
-        if (!SolverOverlay.UploadProgressConfiguredForTesting)
-            throw new InvalidOperationException("在线问题包上传没有配置可视化进度条和单实例按钮初始状态。");
         if (!SolverOverlay.SearchCompletionNotificationSettingsConfiguredForTesting)
             throw new InvalidOperationException("搜索结束通知三态选项没有按持久化设置加载。");
         if (!SolverOverlay.VisualSettingsConfiguredForTesting
@@ -432,8 +428,6 @@ internal sealed partial class UnattendedTestRunner
         {
             throw new InvalidOperationException("策略侧栏没有优先展开到主面板外侧。");
         }
-        if (!SolverOverlay.ExercisePerformanceHintForTesting())
-            throw new InvalidOperationException("战损结果没有可用的性能预设重试胶囊提示。");
         if (!SolverOverlay.ExerciseSearchLimitHintForTesting())
             throw new InvalidOperationException("时间或节点上限停止后没有显示不可关闭的顶部提示。");
         if (strategyPotion is { } potionEntry)
@@ -597,8 +591,6 @@ internal sealed partial class UnattendedTestRunner
         {
             SolverSettings.ApplyForTesting(originalNotificationSettings);
         }
-        if (!SolverOverlay.ExerciseUploadCompletionTransitionForTesting())
-            throw new InvalidOperationException("上传任务结束前按钮状态提前切回空闲，可能重新打开确认弹窗。");
         AssertSearchPortfolioSettings(combat);
         AssertDefaultSearchParallelism();
         string parallelFailure = SolverController.FormatSearchFailureForTesting(
@@ -607,9 +599,9 @@ internal sealed partial class UnattendedTestRunner
         string serialFailure = SolverController.FormatSearchFailureForTesting(
             new InvalidOperationException("serial failure"),
             parallelSearchWasEnabled: false);
-        if (!parallelFailure.Contains("上传问题包", StringComparison.Ordinal)
+        if (parallelFailure.Contains("上传问题包", StringComparison.Ordinal)
             || !parallelFailure.Contains("关闭（单线程）", StringComparison.Ordinal)
-            || !serialFailure.Contains("上传问题包", StringComparison.Ordinal)
+            || serialFailure.Contains("上传问题包", StringComparison.Ordinal)
             || serialFailure.Contains("关闭（单线程）", StringComparison.Ordinal))
         {
             throw new InvalidOperationException("搜索失败提示没有按本次请求的并行状态提供恢复建议。");
@@ -649,28 +641,24 @@ internal sealed partial class UnattendedTestRunner
         SolverController.RecordManualProjectionComparisonForTesting(17, 9, 0, 1);
         SolverOverlay.RefreshControls();
         if (SolverController.ManualRouteImprovementDetected
-            || SolverOverlay.ManualRouteImprovementVisibleForTesting
             || SolverController.LastManualProjectionComparisonForTesting is not
                 { AdditionalPotionCount: 1, PotionAdjustedHpReduction: -1 })
             throw new InvalidOperationException("手操多用一瓶药只省8 HP时产生了更优世界线提示。");
 
         SolverController.RecordManualProjectionComparisonForTesting(18, 1, 0, 2);
         SolverOverlay.RefreshControls();
-        if (SolverController.ManualRouteImprovementDetected
-            || SolverOverlay.ManualRouteImprovementVisibleForTesting)
+        if (SolverController.ManualRouteImprovementDetected)
             throw new InvalidOperationException("手操多用两瓶药只省17 HP时产生了更优世界线提示。");
 
         SolverController.RecordManualProjectionComparisonForTesting(17, 8, 0, 1);
         SolverOverlay.RefreshControls();
-        if (!SolverController.ManualRouteImprovementDetected
-            || !SolverOverlay.ManualRouteImprovementVisibleForTesting)
+        if (!SolverController.ManualRouteImprovementDetected)
             throw new InvalidOperationException("手操多用一瓶药省9 HP时缺少更优世界线提示。");
 
         SolverController.RecordManualProjectionComparisonForTesting(7, 3);
         SolverOverlay.RefreshControls();
         if (!SolverController.ManualRouteImprovementDetected
-            || SolverController.LastManualProjectionComparisonForTesting?.Difference != -4
-            || !SolverOverlay.ManualRouteImprovementVisibleForTesting)
+            || SolverController.LastManualProjectionComparisonForTesting?.Difference != -4)
         {
             throw new InvalidOperationException("手操降低预计战损后没有记录比较结果并显示绿色反馈提示。");
         }
@@ -683,7 +671,6 @@ internal sealed partial class UnattendedTestRunner
         }
 
         AssertBugReportAutomaticClassification();
-        await AssertBugReportUploadBoundariesAsync();
 
         SolverController.RequestSearch(host, combat, SearchReason.Manual);
         if (!SolverController.IsSearching || SolverController.AutomaticSearchPaused)

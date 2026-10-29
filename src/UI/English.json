@@ -91,8 +91,7 @@
   "自动执行中止": "Execution aborted",
   "回合准备选牌失败": "Turn-start choice failed",
   "求解器暂未适配此内容性 Mod：{0}，无法求解。": "The solver does not yet support this content mod: {0}. This combat cannot be solved.",
-  "请在设置中点击“上传问题包”提交日志。": "Open Settings > Upload report to submit your logs. ",
-  "请先在设置中点击“上传问题包”提交日志，再将“搜索并行度”改为“关闭（单线程）”后重试。": "First upload a report in Settings. Then set Search parallelism to Off (one thread) and retry.",
+  "可将“搜索并行度”改为“关闭（单线程）”后重试。": "Set Search parallelism to Off (single-thread) and try again.",
   "问题描述（选填，最多 {0} 字）": "Description (optional, up to {0} characters)",
   "未设置联系QQ；可在“求解器设置”里填写“反馈联系QQ”，以后自动带上。": "No QQ contact set. Add one in Solver Settings to include it in future reports.",
   "联系QQ：{0}（可在“求解器设置”里修改）": "QQ: {0} (change in Solver Settings)",
@@ -377,7 +376,7 @@
   "界面主题": "Theme",
   "深色为默认主题；切换后会重建当前覆盖层，并保留最近的路线与设置页面。": "Dark is the default. Changing theme rebuilds the overlay while keeping the latest route and settings page.",
   "覆盖层透明度": "Overlay opacity",
-  "调整整个求解器覆盖层的透明度，范围为 25%–100%，立即生效。": "Set opacity for the entire solver overlay, from 25% to 100%. Applies immediately.",
+  "调整求解器背景的透明度，范围为 25%–100%，文字与按钮保持清晰，立即生效。": "Set the solver background opacity, from 25% to 100%. Text and buttons stay sharp. Applies immediately.",
   "在线统计": "Online presence",
   "在线统计已开启": "Online presence enabled",
   "在线统计已关闭": "Online presence disabled",
@@ -498,5 +497,6 @@
   "已恢复原有启动配置，重启游戏后生效。本次使用备用回收。": "Original startup config restored; takes effect after restart. Fallback cleanup active this session.",
   "未启用多核回收；当前使用备用的暂缓回收策略。": "Multicore cleanup is off; currently using fallback pause-during-search strategy.",
   "未能修改游戏启动配置，详情见日志；本次继续使用备用回收。": "Failed to modify startup config (see logs); continuing with fallback mode.",
-  "本次未启用多核内存回收，搜索按下方暂缓回收设置运行。": "Multicore cleanup is not active this session; search runs with the pause-during-search setting below."
+  "本次未启用多核内存回收，搜索按下方暂缓回收设置运行。": "Multicore cleanup is not active this session; search runs with the pause-during-search setting below.",
+  "暂无路线": "No route yet"
 }

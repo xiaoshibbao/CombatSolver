@@ -19,6 +19,7 @@ internal sealed partial class SolverPotionStrategyPanel : PanelContainer
     public SolverPotionStrategyPanel()
     {
         Name = "PotionStrategyPanel";
+        Theme = SolverUiTokens.Fonts.Theme;
         Visible = false;
         MouseFilter = MouseFilterEnum.Stop;
         CustomMinimumSize = new Vector2(PreferredWidth, 0);
@@ -271,7 +272,7 @@ internal sealed partial class SolverPotionStrategyPanel : PanelContainer
             MouseDefaultCursorShape = CursorShape.PointingHand,
         };
         input.AddThemeFontSizeOverride("font_size", SolverUiTokens.Type.Body);
-        input.ApplyLocaleFontSubstitution(FontType.Bold, "font");
+        SolverUiTokens.ApplyFont(input, FontType.Bold, "font");
         SolverUiTokens.ApplyTextOutline(input);
         ApplyDirectiveToggle(input, directive);
         return input;

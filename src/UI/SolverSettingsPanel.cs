@@ -8,10 +8,8 @@ internal sealed partial class SolverSettingsPanel : PanelContainer
     private readonly Label _status;
     private readonly Button _generalTab;
     private readonly Button _performanceTab;
-    private readonly Button _bugReportsTab;
     private readonly Control _generalPage;
     private readonly Control _performancePage;
-    private readonly Control _bugReportsPage;
     private readonly List<Action<SolverSettingsData>> _reloadInputs = [];
     private readonly List<Func<bool>> _commitInputs = [];
     private SettingsPage _activePage = SettingsPage.General;
@@ -26,7 +24,7 @@ internal sealed partial class SolverSettingsPanel : PanelContainer
         MouseFilter = MouseFilterEnum.Pass;
         SizeFlagsHorizontal = SizeFlags.ExpandFill;
         AddThemeStyleboxOverride("panel", SolverUiTokens.CreateBox(
-            SolverUiTokens.Palette.Surface,
+            SolverUiTokens.Palette.Layer,
             SolverUiTokens.Palette.BorderSubtle,
             SolverUiTokens.Radius.Medium,
             SolverUiTokens.Spacing.Md,
@@ -67,10 +65,8 @@ internal sealed partial class SolverSettingsPanel : PanelContainer
         tabs.AddThemeConstantOverride("separation", SolverUiTokens.Spacing.Xs);
         _generalTab = CreateTabButton(SolverText.Get("常规"), SettingsPage.General);
         _performanceTab = CreateTabButton(SolverText.Get("性能"), SettingsPage.Performance);
-        _bugReportsTab = CreateTabButton(SolverText.Get("反馈"), SettingsPage.BugReports);
         tabs.AddChild(_generalTab);
         tabs.AddChild(_performanceTab);
-        tabs.AddChild(_bugReportsTab);
         root.AddChild(tabs);
 
         _status = SolverUiTokens.CreateLabel(
@@ -89,10 +85,8 @@ internal sealed partial class SolverSettingsPanel : PanelContainer
         };
         _generalPage = CreateGeneralPage();
         _performancePage = CreatePerformancePage();
-        _bugReportsPage = CreateBugReportsPage();
         pageHost.AddChild(_generalPage);
         pageHost.AddChild(_performancePage);
-        pageHost.AddChild(_bugReportsPage);
         root.AddChild(pageHost);
         root.AddChild(_status);
         AddChild(root);
@@ -107,7 +101,6 @@ internal sealed partial class SolverSettingsPanel : PanelContainer
         _loading = true;
         SolverSettingsData data = SolverSettings.Current;
         ReloadGeneralPage(data);
-        ReloadBugReportsPage(data);
         foreach (Action<SolverSettingsData> reload in _reloadInputs)
             reload(data);
         ReloadPerformancePage(data);
@@ -138,18 +131,14 @@ internal sealed partial class SolverSettingsPanel : PanelContainer
     internal bool SettingsTabsConfiguredForTesting
         => _generalTab.Text == SolverText.Get("常规")
            && _performanceTab.Text == SolverText.Get("性能")
-           && _bugReportsTab.Text == SolverText.Get("反馈")
            && _generalPage.Visible
-           && !_performancePage.Visible
-           && !_bugReportsPage.Visible;
+           && !_performancePage.Visible;
 
     internal bool ExerciseSettingsTabSwitchingForTesting()
     {
         SettingsPage original = _activePage;
         bool switched = TrySelectPage(SettingsPage.Performance)
                         && _performancePage.Visible
-                        && TrySelectPage(SettingsPage.BugReports)
-                        && _bugReportsPage.Visible
                         && TrySelectPage(SettingsPage.General)
                         && _generalPage.Visible;
         if (_activePage != original)
@@ -196,16 +185,12 @@ internal sealed partial class SolverSettingsPanel : PanelContainer
     {
         _generalPage.Visible = _activePage == SettingsPage.General;
         _performancePage.Visible = _activePage == SettingsPage.Performance;
-        _bugReportsPage.Visible = _activePage == SettingsPage.BugReports;
         SolverUiTokens.ApplyButtonStyle(
             _generalTab,
             _activePage == SettingsPage.General ? SolverButtonStyle.Primary : SolverButtonStyle.Secondary);
         SolverUiTokens.ApplyButtonStyle(
             _performanceTab,
             _activePage == SettingsPage.Performance ? SolverButtonStyle.Primary : SolverButtonStyle.Secondary);
-        SolverUiTokens.ApplyButtonStyle(
-            _bugReportsTab,
-            _activePage == SettingsPage.BugReports ? SolverButtonStyle.Primary : SolverButtonStyle.Secondary);
     }
 
     private void SetStatus(string text, Color color)
@@ -236,6 +221,5 @@ internal sealed partial class SolverSettingsPanel : PanelContainer
     {
         General,
         Performance,
-        BugReports,
     }
 }

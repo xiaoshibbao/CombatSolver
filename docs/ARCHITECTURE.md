@@ -17,7 +17,7 @@
 | `src/Runtime/Entry.cs` | 初始化、战斗生命周期接线 |
 | `SolverController.cs` | 主线程请求、结果接收、续用、部署和自动执行 |
 | `SolverControllerSessions.cs` | 战斗、搜索、部署会话生命周期 |
-| `CombatBugReportUploadPolicy.cs` / `CombatBugReportDescription.cs` | 当前战斗内容的上传引导资格与真实错误分类；搜索会话单独记录期间玩家输入 |
+| `CombatBugReportDescription.cs` | 本地诊断归档的错误分类；搜索会话单独记录期间玩家输入 |
 | `CombatRootSnapshot.cs` | 在主线程捕获并核对稳定根 |
 | `ContinuationStamp.cs` | live / predicted 跨回合一致性和字段差异 |
 | `SearchGcPolicy.cs` | 进程 GC、NoGC 和跨战斗回收协调 |
@@ -30,6 +30,8 @@
 常规 GC 搜索的系统余量、分配限额和 Gen2 回收由 Runtime 作用域持有，Search 只在排空后的提交边界消费压力信号。常规检查点刷新请求限额；不可分割提交通过显式退出将分配交给 CLR，下一请求重新建立限额。Runtime 在限额和诊断成功后登记作用域，入口失败释放信号并传播原异常；退出时按作用域清理计数和信号。
 
 `SearchGcRuntimeInfo` 在 Runtime 一次探测按类型查询 GC 信息的能力。具备完整信息时保留后台回收与完成索引核对；检查点重建 NoGC 时直接请求一次压缩完整回收，确认新的压缩完成信息及释放的弱哨兵后才重建。Mono 等运行库使用同步完整回收和弱引用完成哨兵，不因 NoGC 可用而读取不支持的详细信息。暂停观测通过压力信号传递为可空值，Search 消费实际观测并保留其他工作量；检查点及回收日志明确标记不可用的暂停统计。
+
+结束回合与出牌共用原生执行动作捕获，按 OwnerId 对齐本地玩家并等待实际 CompletionTask；重评估前排空真实动作队列。缺少结束边界的稳定推荐先由模拟补齐，挂起选择和未知效果不自动越过。
 
 ## 3. Search
 
@@ -71,6 +73,8 @@
 `.Components` 组合逐项审查的卡牌、生成池、Power、遗物、药水和敌人证明，并锁定审计的原生 MVID。Runtime 在稳定根捕获证书及拒绝原因；模拟状态只提供已捕获的战斗、永久牌组和全局监听前缀，不读取 live。资格随根冻结，分支上界重新检查牌堆、待返回牌、层数和用药记录，未知来源不调用已知来源估计来收紧无限界。Smart 的精确用药层及开局用药后续搜索复用同一节血门槛；完整无药胜利基线经既有 continuation 请求传递，成长、遗物、强制用药、资源追回和保命资源门禁仍保留。证书是搜索元数据，不进入战斗指纹或续用文本。
 
 Smart 药水梯度在主成员耗尽时间时拥有一个独立成员时间：仅对无强制指令、无显式用药的完整搜索结果和可搜索药水启用，首个可选层使用软预算的 1/5（1–30 秒）及 1/6 收尾窗口。梯度显式限制层数；后置开局前缀仍按请求账本准入。该成员的工作进入原请求总账本。
+
+选定路线发布前在同一冻结根中做有界尾部补全：最多16张，新增攻击/格挡须有即时收益且不推进九条RNG、不损失HP/永久资源、不请求选牌；完整原路线重放的HP、资源、药水与边界不退化才采用。已耗尽预算时不再追加随机支援或队友选牌。
 
 ## 4. 模拟与 Prediction
 
@@ -130,7 +134,7 @@ Fork 发生在动作、选牌、Power、死亡和出牌事务允许复制的稳�
 
 ## 7. 工具与维护
 
-工具按 [职责目录](../tools/README.md) 管理。testing 持有无人实例与生产回归检查，replay 持有包恢复与会话，search/performance 持有离线指标与采样，inspection 持有目录和结构检查；build/release/community 分别维护构建、发布与社区流程。Windows MemoryCleaner 由 tools/runtime 提供，在线监控后台由独立私有仓库 combatsolver-presence-service 持有，本仓库仅维护模组端上报和提醒。
+工具按 [职责目录](../tools/README.md) 管理。testing 持有无人实例与生产回归检查，replay 持有包恢复与会话，search/performance 持有离线指标与采样，inspection 持有目录和结构检查；build/release/community 分别维护构建、发布与社区流程。Windows MemoryCleaner 由 tools/runtime 提供，本 fork 不包含在线状态、跑局、录像和反馈上传客户端；导入、诊断日志与回放保持离线。
 
 tools/Directory.Build.props 统一工具项目的仓库根与构建产物路径，生成内容放在 .local/。`tools/inspection/verify-refactor-boundaries.ps1` 和 `.sh` 维护同一职责边界。CoverageCatalog 从公开描述与结构化证据生成覆盖报告，报告的生成版本与测试来源分别说明。
 

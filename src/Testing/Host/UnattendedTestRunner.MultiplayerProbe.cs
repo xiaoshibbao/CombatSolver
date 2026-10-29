@@ -23,6 +23,7 @@ internal sealed partial class UnattendedTestRunner
         public required string CoordinationDirectory { get; init; }
         public required string ExpectedGameVersion { get; init; }
         public bool VerifyRootProjection { get; init; }
+        public bool VerifyTurnFinalization { get; init; }
         public bool VerifyActionDifferential { get; init; }
         public bool VerifyRoundDifferential { get; init; }
         public bool VerifySecondRoundDifferential { get; init; }

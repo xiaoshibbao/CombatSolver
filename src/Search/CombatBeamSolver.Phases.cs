@@ -530,8 +530,19 @@ internal sealed partial class CombatBeamSolver
                 materializedAnnotations = blockPotionInsertion.Annotations;
             }
             bool supportAdded = false;
+            MultiplayerSupportInsertion? completedTurn = resultScope == SolverResultScope.SearchCompletion
+                ? TryCompleteMultiplayerTurn(materializedNode, materializedAnnotations) : null;
+            if (completedTurn != null)
+            {
+                materializedNode.Snapshot.ReleaseSimulator();
+                materializedNode = completedTurn.Node;
+                materializedAnnotations = completedTurn.Annotations;
+                supportAdded = true;
+            }
+            int tailInsertions = 0;
             MultiplayerSupportInsertion? supportInsertion;
             while (resultScope == SolverResultScope.SearchCompletion
+                   && tailInsertions++ < 16
                    && (supportInsertion = TryAppendPureSupport(
                        materializedNode, materializedAnnotations, stopwatch)) != null)
             {
@@ -727,7 +738,7 @@ internal sealed partial class CombatBeamSolver
                 MultiplayerEffectiveDamage = best.CumulativeEnemyHpLost,
                 MultiplayerSetupValue = CurrentTurnSetup(best),
                 MultiplayerCurrentTurnProjectedHp = CurrentTurnSnapshot(best).ProjectedPlayerHp,
-                MultiplayerSupportAdded = supportAdded,
+                MultiplayerSupportAdded = root.PlayerCount > 1 && supportAdded,
                 ResultScope = resultScope,
                 DeterministicBlockPotionInserted = blockPotionInsertion != null,
                 TotalSearchElapsed = stopwatch.Elapsed,
